@@ -348,7 +348,7 @@ wheels = [
 ]
 
 [[package]]
-name = "velodata-discord"
+name = "virtual-worlds-racing-discord"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
