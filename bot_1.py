@@ -23,6 +23,7 @@ async def hi(ctx, user):
 #
 # Get the token from environment variables
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+bot.run(TOKEN)
 
 if __name__ == "__main__":
     print(pycord.__version__)
