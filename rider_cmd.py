@@ -180,7 +180,7 @@ class RegistrationView(discord.ui.View):
 
     @discord.ui.button(label="Instructions", style=discord.ButtonStyle.secondary)
     async def show_instructions(self, button: discord.ui.Button, interaction: discord.Interaction):
-        """Sends the instructions when requested."""
+        """Send the instructions when requested."""
         embed = discord.Embed(
             title="Registration Instructions",
             description=self.INSTRUCTIONS,
@@ -190,6 +190,6 @@ class RegistrationView(discord.ui.View):
 
     @discord.ui.button(label="Register Now", style=discord.ButtonStyle.primary)
     async def register_button(self, button: discord.ui.Button, interaction: discord.Interaction):
-        """Displays the registration modal."""
+        """Display the registration modal."""
         modal = RegistrationForm()
         await interaction.response.send_modal(modal)

@@ -4,7 +4,7 @@
 # ruff: noqa: E402
 import logfire
 
-from rider_cmd import RegistrationForm, lookup_user, RegistrationView
+from rider_cmd import lookup_user, RegistrationView
 
 logfire.configure()
 
@@ -85,14 +85,14 @@ async def test_hello(ctx, name: str = None):
 async def register(ctx):
     """Register a new rider. Press  enter: Only works in the '#rider-admin' channel."""
     if ctx.channel.name not in ["rider-admin", "bot-testing"]:
-        # await ctx.respond("This command can only be used in the `#rider-admin` channel.", ephemeral=True)
-        view = RegistrationView()
-        await ctx.send("Ready to register? Follow the instructions below:", view=view)
+        await ctx.respond("This command can only be used in the `#rider-admin` channel.", ephemeral=True)
         logfire.warn(f"{ctx.author} tried to register outside of the rider-admin channel.")
         return
 
     # Allow the command to proceed if in the correct channel
-    await ctx.response.send_modal(RegistrationForm())
+    # await ctx.response.send_modal(RegistrationForm())
+    view = RegistrationView()
+    await ctx.send("Ready to register? Follow the instructions below:", view=view)
 
 
 @bot.slash_command(name="lookup")
