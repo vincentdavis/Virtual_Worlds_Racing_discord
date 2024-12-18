@@ -140,7 +140,15 @@ async def lookup_user(ctx, user: pycord.Member):
         embed.add_field(name="Discord", value=user.mention, inline=True)
         embed.add_field(name="Name", value=rider.name, inline=True)
         embed.add_field(name="Zwift ID", value=str(rider.zwid), inline=True)
+        embed.add_field(
+            name="ZwiftPower Profile",
+            value=f"[View Profile](https://zwiftpower.com/profile.php?z={rider.zwid})",
+            inline=True,
+        )
+        embed.add_field(name="ZwiftRacing Profile", value=f"[View Profile](https://www.zwiftracing.app/riders/{rider.zwid})", inline=True)
+
         embed.add_field(name="Registered", value=rider.created_at.strftime("%Y-%m-%d"), inline=True)
+
         await ctx.response.send_message(embed=embed, ephemeral=True)
     else:
         await ctx.response.send_message("User not found in registration database.", ephemeral=True)

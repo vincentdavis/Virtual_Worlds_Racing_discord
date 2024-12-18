@@ -84,7 +84,6 @@ async def test_hello(ctx, name: str = None):
 @bot.slash_command(name="register")
 async def register(ctx):
     """Register a new rider. Press  enter: Only works in the '#rider-admin' channel."""
-    # Check if the command is used in the 'rider-admin' channel
     if ctx.channel.name not in ["rider-admin", "bot-testing"]:
         await ctx.respond("This command can only be used in the `#rider-admin` channel.", ephemeral=True)
         logfire.warn(f"{ctx.author} tried to register outside of the rider-admin channel.")
