@@ -11,4 +11,4 @@ COPY . .
 RUN uv sync --frozen
 
 # Run the web service on container startup.
-CMD uv run bot_1.py
+CMD uv run main.py
