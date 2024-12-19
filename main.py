@@ -4,7 +4,7 @@
 # ruff: noqa: E402
 import logfire
 
-from rider_cmd import lookup_user, RegistrationForm
+from rider_cmd import lookup_user, RegistrationView
 
 logfire.configure()
 
@@ -88,21 +88,14 @@ async def register(ctx):
         await ctx.respond("This command can only be used in the `#rider-admin` channel.", ephemeral=True)
         logfire.warn(f"{ctx.author} tried to register outside of the rider-admin channel.")
         return
-
-    ## Allow the command to proceed if in the correct channel
-    ## await ctx.response.send_modal(RegistrationForm())
-
-    # view = RegistrationView()
-    # await ctx.send("Ready to register? Follow the instructions below:", view=view)
-
     INSTRUCTIONS = (
         'Welcome to Virtual Worlds racing "VWR"\n'
         "By registering, you agree to:\n"
         "- [Terms of Service, TOS.](https://example.com/terms)\n"
         "- [Privacy Policy, PP.](https://example.com/privacy)."
     )
-    modal_view = RegistrationForm()
-    await ctx.send(INSTRUCTIONS, view=modal_view)
+    reg_view = RegistrationView()
+    await ctx.send(INSTRUCTIONS, view=reg_view)
 
 
 @bot.slash_command(name="lookup")
