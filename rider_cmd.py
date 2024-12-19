@@ -161,15 +161,6 @@ async def lookup_user(ctx, user: pycord.Member):
 class RegistrationView(discord.ui.View):
     """A View that provides a button to show the Registration Form and displays instructions."""
 
-    INSTRUCTIONS = (
-        "Welcome! Please fill out the registration form carefully.\n\n"
-        "**Instructions:**\n"
-        "1️⃣ Enter your Full Name (minimum 3 characters).\n"
-        "2️⃣ Enter your Zwift ID (a numeric identifier).\n\n"
-        "By registering, you agree to our [Terms of Service](https://example.com/terms) and "
-        "[Privacy Policy](https://example.com/privacy).\n"
-    )
-
     def __init__(self):
         super().__init__(timeout=None)  # Keeps the view active indefinitely until manually stopped
 
@@ -177,16 +168,6 @@ class RegistrationView(discord.ui.View):
         self.add_item(
             discord.ui.Button(label="Register Now", style=discord.ButtonStyle.primary, custom_id="register_button")
         )
-
-    @discord.ui.button(label="Instructions", style=discord.ButtonStyle.secondary)
-    async def show_instructions(self, button: discord.ui.Button, interaction: discord.Interaction):
-        """Send the instructions when requested."""
-        embed = discord.Embed(
-            title="Registration Instructions",
-            description=self.INSTRUCTIONS,
-            color=discord.Color.blue(),
-        )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.ui.button(label="Register Now", style=discord.ButtonStyle.primary)
     async def register_button(self, button: discord.ui.Button, interaction: discord.Interaction):

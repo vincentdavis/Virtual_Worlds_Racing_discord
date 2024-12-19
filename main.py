@@ -4,7 +4,7 @@
 # ruff: noqa: E402
 import logfire
 
-from rider_cmd import lookup_user, RegistrationView
+from rider_cmd import lookup_user, RegistrationForm
 
 logfire.configure()
 
@@ -96,12 +96,12 @@ async def register(ctx):
     # await ctx.send("Ready to register? Follow the instructions below:", view=view)
 
     INSTRUCTIONS = (
-        "Welcome! Please fill out the form below to register.\n"
-        "1. Enter your Full Name (minimum 3 characters).\n"
-        "2. Enter your Zwift ID (a numeric identifier)."
-        "\nBy registering, you agree to our [Terms of Service, TOS.](https://example.com/terms) and [Privacy Policy, PP.](https://example.com/privacy)."
+        'Welcome to Virtual Worlds racing "VWR"\n'
+        "By registering, you agree to:\n"
+        "- [Terms of Service, TOS.](https://example.com/terms)\n"
+        "- [Privacy Policy, PP.](https://example.com/privacy)."
     )
-    modal_view = RegistrationView()
+    modal_view = RegistrationForm()
     await ctx.send(INSTRUCTIONS, view=modal_view)
 
 
