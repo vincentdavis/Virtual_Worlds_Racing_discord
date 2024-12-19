@@ -89,10 +89,20 @@ async def register(ctx):
         logfire.warn(f"{ctx.author} tried to register outside of the rider-admin channel.")
         return
 
-    # Allow the command to proceed if in the correct channel
-    # await ctx.response.send_modal(RegistrationForm())
-    view = RegistrationView()
-    await ctx.send("Ready to register? Follow the instructions below:", view=view)
+    ## Allow the command to proceed if in the correct channel
+    ## await ctx.response.send_modal(RegistrationForm())
+
+    # view = RegistrationView()
+    # await ctx.send("Ready to register? Follow the instructions below:", view=view)
+
+    INSTRUCTIONS = (
+        "Welcome! Please fill out the form below to register.\n"
+        "1. Enter your Full Name (minimum 3 characters).\n"
+        "2. Enter your Zwift ID (a numeric identifier)."
+        "\nBy registering, you agree to our [Terms of Service, TOS.](https://example.com/terms) and [Privacy Policy, PP.](https://example.com/privacy)."
+    )
+    modal_view = RegistrationView()
+    await ctx.send(INSTRUCTIONS, view=modal_view)
 
 
 @bot.slash_command(name="lookup")
