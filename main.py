@@ -3,8 +3,10 @@
 # ruff: noqa: I001
 # ruff: noqa: E402
 import logfire
+from dotenv import load_dotenv
 
-from rider_cmd import lookup_user, RegistrationView
+# Load environment variables from .env file
+load_dotenv()
 
 logfire.configure()
 
@@ -12,15 +14,13 @@ logfire.configure()
 # ruff: E402 on
 import os
 
+from rider_cmd import lookup_user, RegistrationView
 import discord as pycord
 from beanie import init_beanie
-from dotenv import load_dotenv
+
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from db_models import Rider, Club, Team
-
-# Load environment variables from .env file
-load_dotenv()
 
 
 with logfire.span("Starting bot"):
