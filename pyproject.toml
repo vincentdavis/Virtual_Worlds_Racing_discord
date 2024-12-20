@@ -1,12 +1,12 @@
 [project]
 name = "Virtual_Worlds_Racing_discord"
 version = "0.1.0"
-description = "Add your description here"
+description = "Virtual Worlds Racing Discord Bot"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "beanie>=1.28.0",
     "logfire>=2.7.1",
-    "py-cord>=2.6.1",
+    "discord.py>=2.0.0",
     "python-dotenv>=1.0.1",
 ]
