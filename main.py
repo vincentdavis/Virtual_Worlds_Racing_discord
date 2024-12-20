@@ -46,9 +46,10 @@ async def on_ready():
     """Initialize MongoDB connection, Beanie ORM."""
     logfire.info("Initialize Beanie ORM")
     client = AsyncIOMotorClient(os.getenv("MONGO_URL"))
+    db_name = os.getenv("MONGO_DB")
     await init_beanie(
-        database=client.VIRTUAL_WORLDS_RACING,  # Specify database here
-        document_models=[Rider, Team, Club],  # , Team, Club],
+        database=client.db_name,  # Specify database here
+        document_models=[Rider, Team, Club],  # Specify document models here
     )
     logfire.info("Beanie ORM initialized")
     # Sync commands
@@ -95,7 +96,8 @@ async def register(ctx):
         "- [Privacy Policy, PP.](https://example.com/privacy)."
     )
     reg_view = RegistrationView()
-    await ctx.send(INSTRUCTIONS, view=reg_view)
+    # await ctx.send(INSTRUCTIONS, view=reg_view, ephemeral=True)
+    await ctx.response.send_message(INSTRUCTIONS, view=reg_view, ephemeral=True)
 
 
 @bot.slash_command(name="lookup")

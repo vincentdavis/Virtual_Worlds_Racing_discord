@@ -19,23 +19,9 @@ load_dotenv()
 class RegistrationForm(discord.ui.Modal):
     """Registration form."""
 
-    INSTRUCTIONS = (
-        "Welcome! Please fill out the form below to register.\n"
-        "1. Enter your Full Name (minimum 3 characters).\n"
-        "2. Enter your Zwift ID (a numeric identifier)."
-        "\nBy registering, you agree to our [Terms of Service, TOS.](https://example.com/terms) and [Privacy Policy, PP.](https://example.com/privacy)."
-    )
-
     def __init__(self) -> None:
         super().__init__(title="Registration Form")
         # Display instructions at the top
-        self.instructions = discord.ui.InputText(
-            label="Instructions",
-            value=self.INSTRUCTIONS,
-            style=discord.InputTextStyle.paragraph,
-            required=False,  # Make it read-only
-        )
-        self.add_item(self.instructions)
 
         self.name = discord.ui.InputText(
             label="Full Name", placeholder="Enter your name...", min_length=3, max_length=50, required=True
@@ -164,13 +150,18 @@ class RegistrationView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)  # Keeps the view active indefinitely until manually stopped
 
-        # Add the registration button
-        self.add_item(
-            discord.ui.Button(label="Register Now", style=discord.ButtonStyle.primary, custom_id="register_button")
-        )
+        # # Add the registration button
+        # self.add_item(discord.ui.Button(label="Cancel", style=discord.ButtonStyle.primary, custom_id="Cancel"))
 
     @discord.ui.button(label="Register Now", style=discord.ButtonStyle.primary)
     async def register_button(self, button: discord.ui.Button, interaction: discord.Interaction):
         """Display the registration modal."""
+        logfire.info(f"{interaction.user} clicked Register Now")
         modal = RegistrationForm()
         await interaction.response.send_modal(modal)
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.primary)
+    async def cancel_button(self, button: discord.ui.Button, interaction: discord.Interaction):
+        """Do nothing"""
+        logfire.info(f"{interaction.user} cancelled registration")
+        await interaction.response.send_message("Registration cancelled", ephemeral=True)
