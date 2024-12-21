@@ -1,12 +1,8 @@
-"""Defines the database models for the app database."""
-
 from datetime import datetime
 
+import logfire
 from beanie import Document, Link
-from dotenv import load_dotenv
 from pydantic import Field
-
-load_dotenv()
 
 
 class Rider(Document):
@@ -125,12 +121,18 @@ class Club(Document):
             ValueError: If the creator is inactive
 
         """
-        if not creator or not creator.active:
-            raise ValueError("Club creator must be an active rider")
-
-        club = cls(name=name, zp_club_id=zp_club_id, admins=[creator])
-        await club.save()
-        return club
+        try:
+            logfire.info(f"Saving club'{name}'")
+            creator = await Rider.find_one({"discord_id": creator.discord_id})
+            if not creator.active:
+                logfire.error(f"Rider {creator.name} is inactive")
+                return None
+            club = cls(name=name, zp_club_id=zp_club_id, admins=[creator])
+            await club.save()
+            return club
+        except Exception as e:
+            logfire.error(f"Failed to create club: {e}")
+            raise e
 
     class Settings:
         name = "clubs"

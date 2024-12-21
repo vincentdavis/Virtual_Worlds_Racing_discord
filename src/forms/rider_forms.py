@@ -1,19 +1,7 @@
-"""Registration form."""
-
 import discord
-import discord as pycord
 import logfire
 
-# from discord.ext import commands
-from dotenv import load_dotenv
-
-from db_models import Rider
-
-load_dotenv()
-
-
-# Discord bot setup
-# bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
+from src.database.db_models import Rider
 
 
 class RegistrationForm(discord.ui.Modal):
@@ -114,54 +102,3 @@ class RegistrationForm(discord.ui.Modal):
                 await interaction.response.send_message("❌ Zwift ID be a valid number.", ephemeral=True)
                 logfire.error(f"{interaction.user} entered an invalid Zwift ID.")
             logfire.info(f"Registration complete for {interaction.user}")
-
-
-async def lookup_user(ctx, user: pycord.Member):
-    """Look up a user in the registration database."""
-    logfire.info(f"Looking up user: {user}")
-    rider = await Rider.find_one({"discord_id": user.id})
-    if rider:
-        logfire.info(f"Found user: {rider}")
-        embed = pycord.Embed(title="Registration Info", color=pycord.Color.blue())
-        embed.add_field(name="Discord", value=user.mention, inline=True)
-        embed.add_field(name="Name", value=rider.name, inline=True)
-        embed.add_field(name="Zwift ID", value=str(rider.zwid), inline=True)
-        embed.add_field(
-            name="ZwiftPower Profile",
-            value=f"[View Profile](https://zwiftpower.com/profile.php?z={rider.zwid})",
-            inline=True,
-        )
-        embed.add_field(
-            name="ZwiftRacing Profile",
-            value=f"[View Profile](https://www.zwiftracing.app/riders/{rider.zwid})",
-            inline=True,
-        )
-
-        embed.add_field(name="Registered", value=rider.created_at.strftime("%Y-%m-%d"), inline=True)
-
-        await ctx.response.send_message(embed=embed, ephemeral=True)
-    else:
-        await ctx.response.send_message("User not found in registration database.", ephemeral=True)
-
-
-class RegistrationView(discord.ui.View):
-    """A View that provides a button to show the Registration Form and displays instructions."""
-
-    def __init__(self):
-        super().__init__(timeout=None)  # Keeps the view active indefinitely until manually stopped
-
-        # # Add the registration button
-        # self.add_item(discord.ui.Button(label="Cancel", style=discord.ButtonStyle.primary, custom_id="Cancel"))
-
-    @discord.ui.button(label="Register Now", style=discord.ButtonStyle.primary)
-    async def register_button(self, button: discord.ui.Button, interaction: discord.Interaction):
-        """Display the registration modal."""
-        logfire.info(f"{interaction.user} clicked Register Now")
-        modal = RegistrationForm()
-        await interaction.response.send_modal(modal)
-
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.primary)
-    async def cancel_button(self, button: discord.ui.Button, interaction: discord.Interaction):
-        """Do nothing"""
-        logfire.info(f"{interaction.user} cancelled registration")
-        await interaction.response.send_message("Registration cancelled", ephemeral=True)
