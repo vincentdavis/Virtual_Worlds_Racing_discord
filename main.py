@@ -19,7 +19,7 @@ from beanie import init_beanie
 
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from src.database.db_models import Rider, Team, Club
+from src.database.db_models import Rider, Org, Membership
 
 with logfire.span("STARTING BOT"):
     # Get the token from environment variables
@@ -49,7 +49,7 @@ async def on_ready():
     db_name = os.getenv("MONGO_DB")
     await init_beanie(
         database=client[db_name],  # Specify database here
-        document_models=[Rider, Team, Club],  # Specify document models here
+        document_models=[Rider, Org, Membership],  # Specify document models here
     )
     logfire.info("Beanie ORM initialized")
     # Sync commands
@@ -78,7 +78,8 @@ async def test_hello(ctx, name: str = None):
 
 
 bot.load_extension("src.cogs.rider_cog")
-bot.load_extension("src.cogs.club_cog")
+bot.load_extension("src.cogs.membership_cog")
+bot.load_extension("src.cogs.org_cog")
 
 
 # Get the token from environment variables
@@ -91,5 +92,4 @@ logfire.info("Bot started: if your here it has stopped")
 #     print(pycord.__version__)
 #     TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 #     if not TOKEN:
-#         raise ValueError("No token found! Make sure to set DISCORD_BOT_TOKEN in your .env file.")
-#     bot.run(TOKEN)
+#         raise ValueError("No token found! Make sure to set DISCORD_BOT_TOKEN in your .env file."
