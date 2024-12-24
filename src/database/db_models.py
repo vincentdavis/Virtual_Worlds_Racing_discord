@@ -1,16 +1,32 @@
 from datetime import datetime
+from enum import Enum
+from typing import Any, Literal, Optional
 
 import logfire
-from beanie import Document, Link
+from beanie import Document, Indexed
 from pydantic import Field
+from pymongo import ASCENDING, IndexModel
+
+
+class MembType(Enum):  # NOQA
+    CLUB_ADMIN = "club_admin"
+    TEAM_ADMIN = "team_admin"
+    TEAM_MEMBER = "team_member"
+    CLUB_MEMBER = "club_member"
+
+
+class NewOrgMessage(Enum):  # NOQA
+    SUCCESS = "success"
+    DUPLICATE = "duplicate"
+    ERROR = "error"
 
 
 class Rider(Document):
     """Rider document model."""
 
-    name: str = Field(min_length=3, max_length=50)
-    zwid: int = Field(gt=0)
-    discord_id: int = Field(gt=0)
+    name: Indexed(str, unique=True) = Field(min_length=3, max_length=50)
+    zwid: Indexed(int, unique=True) = Field(gt=0)
+    discord_id: Indexed(int, unique=True) = Field(gt=0)
     discord_name: str
     tos: bool = Field(default=False)
     active: bool = True
@@ -22,19 +38,36 @@ class Rider(Document):
         self.updated_at = datetime.now()
         await super().save(*args, **kwargs)
 
-    class Settings:
-        """Settings for the document."""
+    @classmethod
+    async def is_registered(cls, ctx, fail_message: str = "You must be a registered rider to perform this action."):
+        """Check if a rider is registered."""
+        try:
+            logfire.info(f"Checking if user {ctx.author} is a registered rider.")
+            rider = await cls.find_one({"discord_id": ctx.author.id})
+            if not rider:
+                logfire.info(f"User {ctx.author} is not a registered rider.")
+                await ctx.response.send_message(fail_message, ephemeral=True)
+                return False
+            return True
+        except Exception as e:
+            logfire.error(f"Failed to check if user is registered: {e}")
+            await ctx.response.send_message("❌ Failed to check if user is registered.", ephemeral=True)
+            return False
 
+    class Settings:  # NOQA
         name = "riders"
         # indexes = [("discord_id", 1), ("zwid", 1)]
 
 
-class Team(Document):
-    """Team document model."""
+class Org(Document):
+    """Club and team and other model."""
 
-    name: str = Field(min_length=3, max_length=50)
-    admins: list[Link[Rider]] = Field(min_length=1)
+    org_type: Literal["club", "team"]
+    name: Indexed(str, unique=True) = Field(min_length=3, max_length=50)
+    discord_id: str | None = None  # Discord id of the user that created the club
+    zp_club_id: Indexed(int, unique=True) | None = None  # Optional Zwift Power team (club) id
     active: bool = True
+    note: str | None = None
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 
@@ -42,101 +75,145 @@ class Team(Document):
         """Override save to update timestamp."""
         self.updated_at = datetime.now()
         await super().save(*args, **kwargs)
-
-    class Settings:
-        """Settings for the document."""
-
-        name = "teams"
-        # indexes = [{"fields": ["name"], "unique": True}]
-
-
-class Club(Document):
-    """Club document model."""
-
-    # TODO: Should do some checking on the class methods to be sure the user is an admin
-    name: str = Field(min_length=3, max_length=50)
-    zp_club_id: int | None = None  # Optional Zwift Power team (club) id
-    admins: list[Link[Rider]] = Field(min_length=1)
-    teams: list[Link[Team]] | None = None
-    active: bool = True
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
-
-    async def save(self, *args, **kwargs) -> None:
-        """Override save to update timestamp."""
-        self.updated_at = datetime.now()
-        await super().save(*args, **kwargs)
-
-    async def mark_active(self):
-        """Mark the club as active."""
-        self.active = True
-        await self.save()
-
-    async def mark_inactive(self):
-        """Mark the club as inactive."""
-        self.active = False
-        await self.save()
-
-    async def add_admin(self, rider: "Rider") -> None:
-        """Add a new admin to the club."""
-        if rider not in self.admins:
-            self.admins.append(Link(rider))
-            await self.save()
-
-    async def remove_admin(self, rider: "Rider") -> None:
-        """Remove an admin from the club."""
-        if rider in self.admins:
-            if len(self.admins) == 1:
-                raise ValueError("A club must have at least one admin.")
-            self.admins.remove(Link(rider))
-            await self.save()
-
-    async def add_team(self, team: "Team") -> None:
-        """Add a team to the club."""
-        if self.teams is None:
-            self.teams = []
-        if team not in self.teams:
-            self.teams.append(Link(team))
-            await self.save()
-
-    async def remove_team(self, team: "Team") -> None:
-        """Remove a team from the club."""
-        if self.teams and team in self.teams:
-            self.teams.remove(Link(team))
-            await self.save()
 
     @classmethod
-    async def create_club(cls, name: str, creator: Rider, zp_club_id: int | None = None) -> "Club":
-        """Create a new club and assign the creator as an admin.
+    async def new_org(
+        cls, discord_id: int, org_type: Literal["club", "team"], name: str, zp_club_id: int | None = None
+    ) -> tuple[Optional["Org"], NewOrgMessage]:
+        """Create a new club or team."""
+        with logfire.span("New Org"):
+            existing_org = await cls.find_one({"name": name})
+            if existing_org:
+                logfire.info(f"Org already exists: {existing_org}")
+                return (None, NewOrgMessage.DUPLICATE)
+            try:
+                org = cls.model_validate(
+                    {"org_type": org_type, "name": name, "discord_id": str(discord_id), "zp_club_id": zp_club_id}
+                )
+            except Exception as e:
+                logfire.error(f"Failed to validate new org: {e}")
+                return None, NewOrgMessage.ERROR
+            rider = await Rider.find_one({"discord_id": discord_id})
+            mem_type: MembType = MembType.CLUB_ADMIN if org_type == "club" else MembType.TEAM_ADMIN
 
-        Args:
-            name: The name of the club
-            creator: The rider creating the club
-            zp_club_id: Optional Zwift Power club ID
+            #####
+            try:
+                await org.save()
+                new_org = await Org.find_one({"name": name})  # The name is unique
+                await Membership.add_remove_membership(
+                    action="add", rider=rider, org_id=str(new_org.id), membership_type=mem_type
+                )
+                return org, NewOrgMessage.SUCCESS
+            except Exception:
+                logfire.error("Failed to creat new or and admin ")
 
-        Returns:
-            The newly created club
+    class Settings:  # NOQA
+        name = "orgs"
 
-        Raises:
-            ValueError: If the creator is inactive
 
-        """
-        try:
-            logfire.info(f"Saving club'{name}'")
-            creator = await Rider.find_one({"discord_id": creator.discord_id})
-            if not creator.active:
-                logfire.error(f"Rider {creator.name} is inactive")
-                return None
-            club = cls(name=name, zp_club_id=zp_club_id, admins=[creator])
-            await club.save()
-            return club
-        except Exception as e:
-            logfire.error(f"Failed to create club: {e}")
-            raise e
+class Membership(Document):
+    """Membership records for clubs and teams.
 
-    class Settings:
-        name = "clubs"
-        # indexes = [
-        #     {"key": [("name", 1)]},
-        #     {"key": [("zp_club_id", 1)]},
-        # ]
+    MembType = Literal["club_admin", "team_admin", "team_member", "club_member"]
+    """
+
+    membership_type: MembType
+    org_id: str
+    rider_id: str
+    discord_id: int
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
+
+    async def save(self, *args, **kwargs) -> None:  # NOQA
+        self.updated_at = datetime.now()
+        await super().save(*args, **kwargs)
+
+    @classmethod
+    async def get_user_membership(
+        cls,
+        membership_type: set[MembType],
+        discord_id: int | None = None,
+        rider_id: str | None = None,
+        rider: Rider | None = None,
+    ) -> list[Org | None]:
+        """Find all clubs where the given user (discord_id or rider_id or Rider) is an admin."""
+        logfire.info(f"Get Membership Orgs for user: {membership_type}, {discord_id}, {rider_id}, {rider}")
+        if rider is not None:
+            discord_id = rider.discord_id
+            rider_id = rider.id
+        org_ids = {
+            org.id
+            for org in await cls.find(
+                ({"discord_ids": discord_id} | {"rider_ids": rider_id})
+                & ({"membership_type": {"$in": membership_type}})
+            ).to_list()
+        }
+        orgs = await Org.find({"id": {"$in": org_ids}}).to_list()
+        return orgs
+
+    @classmethod
+    async def add_remove_membership(
+        cls,
+        action: Literal["add", "remove"],
+        membership_type: MembType,
+        ctx: Any | None = None,
+        org: Org | None = None,
+        org_id: str | None = None,
+        discord_id: int | None = None,
+        rider_id: str | None = None,
+        rider: Rider | None = None,
+    ) -> Optional["Membership"]:
+        """Add a new Club admin record."""
+        with logfire.span("Add Membership"):
+            # if not isinstance(discord_id, int) or discord_id <= 0:
+            #     logfire.error(f"Invalid 'discord_id' provided. {discord_id}")
+            #     raise ValueError("Invalid 'discord_id' provided.")
+            if rider is not None:
+                discord_id = rider.discord_id
+                rider_id = rider.id
+            if ctx is not None:  # noqa
+                if not await Rider.is_registered(ctx):
+                    return
+
+            if not rider_id:
+                rider_id = await Rider.find_one({"discord_id": discord_id})
+                if not rider_id:
+                    logfire.notice(f"Rider ID {discord_id} not found")
+                    return
+
+            if org is not None:
+                org_id = org.id
+            try:
+                logfire.info(f"Prepare membership_obj for {membership_type}, {org_id}, {rider_id}, {discord_id}")
+                new_mem_dict = {
+                    "membership_type": membership_type,
+                    "org_id": str(org_id),
+                    "rider_id": str(rider_id),
+                    "discord_id": int(discord_id),
+                }
+                new_membership = cls.model_validate(new_mem_dict)
+            except Exception as e:
+                logfire.error(f"Failed to validate membership object: {e!s}")
+            logfire.info("Check for existing membership")
+            existing_membership = await cls.find(new_membership.model_dump()).first_or_none()
+            if existing_membership is not None:
+                logfire.info(f"Membership exists for {membership_type}")
+                existing_membership.membership_type = membership_type
+                await existing_membership.save()
+            else:
+                logfire.info(f"Non found Adding membership for {new_membership}")
+                await new_membership.save()
+                return new_membership
+
+    class Settings:  # NOQA
+        name = "membership"
+        indexes = [  # noqa
+            IndexModel(
+                [("membership_type", ASCENDING), ("discord_id", ASCENDING), ("org_id", ASCENDING)],
+                unique=True,
+                name="unique_membership",
+            )
+        ]
+
+
+###############
