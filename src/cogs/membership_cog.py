@@ -2,7 +2,7 @@ import discord
 import logfire
 from discord.ext import commands
 
-from src.database.db_models import Membership, Rider
+from src.database.db_models import Membership, MembType, Rider
 
 
 class MembershipCog(commands.Cog):
@@ -14,19 +14,18 @@ class MembershipCog(commands.Cog):
         logfire.info("Add Admin to Club")
         try:
             if not await Rider.is_registered(ctx):
-                await ctx.respond("❌ You must be registered to manage club admins.", ephemeral=True)
                 return
 
             rider = await Rider.find_one({"discord_id": ctx.author.id})
             logfire.info(f"Rider: {rider} with id: {rider.id}")
             if not rider:
-                await ctx.respond("❌ Rider profile not found.", ephemeral=True)
+                await ctx.respond(f"❌ Rider profile not found for user {discord.Member}.", ephemeral=True)
                 return
 
             admin_clubs = await Membership.get_user_membership(
-                membership_type=[
-                    "Club_admin",
-                ],
+                membership_type={
+                    MembType.CLUB_ADMIN,
+                },
                 rider=rider,
             )
             logfire.info(f"Admin Clubs: {admin_clubs}")
@@ -46,27 +45,15 @@ class MembershipCog(commands.Cog):
 
             async def callback(interaction):
                 selected_club_id = interaction.data["values"][0]
-                selected_club = await Membership.find_one({"_id": selected_club_id})
-
-                if not selected_club:
-                    await interaction.response.send_message("❌ Club no longer exists.", ephemeral=True)
-                    return
-
-                if target_user.id in [admin.discord_id for admin in selected_club.admins]:
-                    await interaction.response.send_message(
-                        f"❌ '{target_user.display_name}' is already an admin for club '{selected_club.name}'.",
-                        ephemeral=True,
-                    )
-                    return
-
-                new_admin = await Rider.find_one({"discord_id": target_user.id})
-                if not new_admin:
-                    await interaction.response.send_message("❌ Target user is not a registered rider.", ephemeral=True)
-                    return
-
-                await selected_club.add_admin(new_admin)
-                await interaction.response.send_message(
-                    f"✅ '{target_user.display_name}' has been added as an admin to club '{selected_club.name}'.",
+                logfire.info(f"Selected Club ID: {selected_club_id}")
+                await Membership.add_remove_membership(
+                    action="add",
+                    membership_type=MembType.CLUB_ADMIN,
+                    discord_id=target_user.id,
+                    org_id=selected_club_id,
+                )
+                ctx.response(
+                    "✅ '{target_user.display_name}' has been added as an admin to club '{selected_club.name}'.",
                     ephemeral=True,
                 )
 
@@ -78,7 +65,7 @@ class MembershipCog(commands.Cog):
 
         except Exception as e:
             logfire.error(f"Failed to add admin to club: {e}")
-            raise e
+            # raise e
             await ctx.respond("❌ An error occurred while adding admin.", ephemeral=True)
 
 

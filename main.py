@@ -47,6 +47,7 @@ async def on_ready():
         os.getenv("MONGO_URL"),
     )
     db_name = os.getenv("MONGO_DB")
+    logfire.info("initialize Beanie connection")
     await init_beanie(
         database=client[db_name],  # Specify database here
         document_models=[Rider, Org, Membership],  # Specify document models here

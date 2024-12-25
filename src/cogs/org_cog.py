@@ -24,7 +24,7 @@ class OrgCog(commands.Cog):
                 create_form = CreateOrgForm(ctx, org_type="club")
                 await ctx.response.send_modal(create_form)
             except Exception as e:
-                logfire.error(f"Failed to create club: {e}")
+                logfire.error(f"Failed to create club: {e}", exc_info=True)
                 await ctx.response.send_message("❌ Failed to create club.", ephemeral=True)
 
 
