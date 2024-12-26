@@ -1,4 +1,4 @@
-from db_models import ClubAdmin
+from db_models_mongo import ClubAdmin
 
 
 def test_add_club_admin():

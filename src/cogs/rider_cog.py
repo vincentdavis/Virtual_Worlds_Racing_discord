@@ -2,7 +2,7 @@ import discord
 import logfire
 from discord.ext import commands
 
-from src.database.db_models import Rider
+from src.database.db_models import User
 from src.forms.rider_forms import RegistrationForm
 
 
@@ -32,26 +32,15 @@ class RiderCog(commands.Cog):
     async def rider_lookup(self, ctx, user: discord.Member):
         """Look up a user in the registration database."""
         logfire.info(f"Looking up user: {user}")
-        rider = await Rider.find_one({"discord_id": user.id})
-        if rider:
-            logfire.info(f"Found user: {rider}")
+        # rider = await Rider.find_one({"discord_id": user.id})
+        user_profile = User.lookup(discord_id=user.id)
+
+        if user_profile:
+            logfire.info(f"Found user: {user_profile}")
             embed = discord.Embed(title="Registration Info", color=discord.Color.blue())
             embed.add_field(name="Discord", value=user.mention, inline=True)
-            embed.add_field(name="Name", value=rider.name, inline=True)
-            embed.add_field(name="Zwift ID", value=str(rider.zwid), inline=True)
-            embed.add_field(
-                name="ZwiftPower Profile",
-                value=f"[View Profile](https://zwiftpower.com/profile.php?z={rider.zwid})",
-                inline=True,
-            )
-            embed.add_field(
-                name="ZwiftRacing Profile",
-                value=f"[View Profile](https://www.zwiftracing.app/riders/{rider.zwid})",
-                inline=True,
-            )
-
-            embed.add_field(name="Registered", value=rider.created_at.strftime("%Y-%m-%d"), inline=True)
-
+            for k, v in user_profile.items():
+                embed.add_field(name=k, value=v, inline=True)
             await ctx.response.send_message(embed=embed, ephemeral=True)
         else:
             await ctx.response.send_message("User not found in registration database.", ephemeral=True)

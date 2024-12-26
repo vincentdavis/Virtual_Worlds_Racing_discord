@@ -2,7 +2,6 @@ import discord
 import logfire
 from discord.ext import commands
 
-from src.database.db_models import Rider
 from src.forms.org_forms import CreateOrgForm
 from src.untils import check_channel
 
@@ -15,8 +14,6 @@ class OrgCog(commands.Cog):
         """Create a new Club. PRES ENTER."""
         with logfire.span("CREATE CLUB"):
             try:
-                if not await Rider.is_registered(ctx):
-                    return
                 if not await check_channel(
                     ctx, ["club-admin"], "This command can only be used in the `#club-admin` channel."
                 ):

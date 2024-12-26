@@ -1,7 +1,7 @@
 import discord
 import logfire
 
-from src.database.db_models import Rider
+from src.database.db_models import User
 
 
 class RegistrationForm(discord.ui.Modal):
@@ -47,7 +47,7 @@ class RegistrationForm(discord.ui.Modal):
                     tos = True
                 zwid_int = int(self.zwid.value)
                 # Check if user is already registered
-                existing_discord = await Rider.find_one({"discord_id": interaction.user.id})
+                existing_discord = User.get_or_none(User.discord_id == interaction.user.id)
                 if existing_discord:
                     await interaction.response.send_message(
                         "❌ You are already registered a Contact an admin if there are problems", ephemeral=True
@@ -55,13 +55,14 @@ class RegistrationForm(discord.ui.Modal):
                     logfire.warn(f"{interaction.user} tried to register again.")
                     return
 
-                existing_zwid = await Rider.find_one({"zwid": zwid_int})
+                existing_zwid = User.get_or_none(User.zwid == zwid_int)
                 if existing_zwid:
                     await interaction.response.send_message(
                         "❌ Zwift ID is already registered! Contact an admin if there are problems", ephemeral=True
                     )
                     logfire.warn(f"{interaction.user} tried to register with an existing Zwift ID.")
-                existing_name = await Rider.find_one({"name": self.name.value})
+
+                existing_name = User.get_or_none(User.name == self.name.value)
                 if existing_name:
                     await interaction.response.send_message(
                         "❌ Name is already registered! Contact an admin if there are problems", ephemeral=True
@@ -71,25 +72,33 @@ class RegistrationForm(discord.ui.Modal):
             except Exception as e:
                 logfire.error(f"Failed to check for user already exists: {e}")
                 await interaction.response.send_message("❌ Failed to check for user already exists", ephemeral=True)
+                return
 
             try:
                 # Create and save registration
                 logfire.info(f"Saving {interaction.user} with zwid {zwid_int}")
-                rider = Rider(
+                user_def = dict(
                     discord_id=interaction.user.id,
                     discord_name=str(interaction.user),
                     name=self.name.value,
                     zwid=zwid_int,
                     tos=tos,
+                    active=True,
                 )
-                await rider.save()
-
+                logfire.info(f"Creating User object with:\n {user_def}")
+                user = User.create(
+                    discord_id=interaction.user.id,
+                    discord_name=str(interaction.user),
+                    name=self.name.value,
+                    zwid=zwid_int,
+                    tos=tos,
+                    active=True,
+                )
                 # Send confirmation
                 logfire.info(f"Sending confirmation to {interaction.user}")
                 embed = discord.Embed(title="✅ Registration Successful!", color=discord.Color.green())
                 embed.add_field(name="Name", value=self.name.value, inline=True)
                 embed.add_field(name="Zwift ID", value=self.zwid.value, inline=True)
-
                 await interaction.response.send_message(embed=embed, ephemeral=True)
 
                 # Log registration
@@ -101,4 +110,9 @@ class RegistrationForm(discord.ui.Modal):
             except ValueError:
                 await interaction.response.send_message("❌ Zwift ID be a valid number.", ephemeral=True)
                 logfire.error(f"{interaction.user} entered an invalid Zwift ID.")
+
+            except Exception as e:
+                await interaction.response.send_message(f"❌ Failed to register user: {user_def}.", ephemeral=True)
+                logfire.error(f"Failed to register user: {user_def}\n {e}", exc_info=True)
+
             logfire.info(f"Registration complete for {interaction.user}")

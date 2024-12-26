@@ -2,7 +2,7 @@ import discord
 import logfire
 from discord.ext import commands
 
-from src.database.db_models import Membership, MembType, Rider
+from src.database.db_models_mongo import Membership, MembType, Rider
 
 
 class MembershipCog(commands.Cog):

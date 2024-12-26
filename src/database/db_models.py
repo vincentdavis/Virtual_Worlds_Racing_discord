@@ -1,249 +1,325 @@
+"""Peewee model definitions for the database."""
+
+import os
 from datetime import datetime
-from enum import Enum
-from typing import Any, Literal, Optional
 
 import logfire
-from beanie import Document
-from bson import ObjectId
-from pydantic import Field
-from pymongo import ASCENDING, IndexModel
+from dotenv import load_dotenv
+from peewee import (
+    BigIntegerField,
+    BooleanField,
+    CharField,
+    DateTimeField,
+    ForeignKeyField,
+    IntegerField,
+    IntegrityError,
+    Model,
+    SqliteDatabase,
+)
+from playhouse.db_url import connect
+from playhouse.shortcuts import model_to_dict
+from psycopg2 import OperationalError
+
+from src.vwr_exceptions import (
+    NoClubMembership,
+    NotAClubAdmin,
+    NotATeamAdmin,
+    TeamNotFound,
+    UserAlreadyInClub,
+    UserAlreadyOnTeam,
+    UserNotRegistered,
+)
 
 
-class MembType(Enum):  # NOQA
-    CLUB_ADMIN = "club_admin"
-    TEAM_ADMIN = "team_admin"
-    TEAM_MEMBER = "team_member"
-    CLUB_MEMBER = "club_member"
+def init_db():
+    """Initialize the Peewee database."""
+    try:
+        load_dotenv()
+        database_url = os.getenv("DATABASE_URL", None)
+        if database_url is not None:
+            logfire.info(f"Database URL: {database_url.split("@")[-1]}")
+            db = connect(database_url)
+            logfire.info("Connected to PostgreSQL database.")
+            return db
+        else:
+            sqlite_file_name = "Peewee_SQLite.db"
+            logfire.info(f"Database URL: {sqlite_file_name}")
+            db = SqliteDatabase(sqlite_file_name)
+            logfire.info("Connected to SQLite database.")
+            return db
+    except Exception as e:
+        logfire.error(f"Failed to connect to the database: {e}", exc_info=True)
+        raise e
 
 
-class NewOrgMessage(Enum):  # NOQA
-    SUCCESS = "success"
-    DUPLICATE = "duplicate"
-    ERROR = "error"
+db = init_db()
 
 
-class Rider(Document):
-    """Rider document model."""
+class BaseModel(Model):
+    """Base model to define the database connection."""
 
-    name: str = Field(min_length=3, max_length=50)
-    zwid: int = Field(gt=0)
-    discord_id: int = Field(gt=0)
-    discord_name: str
-    tos: bool = Field(default=False)
-    active: bool = True
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
+    class Meta:  # noqa: D106
+        database = db
 
-    async def save(self, *args, **kwargs):
+
+class Club(BaseModel):
+    """Club model."""
+
+    name = CharField(unique=True, index=True, max_length=50)
+    zp_club_id = IntegerField(null=True, unique=True)  # Optional Zwift Power team (club) ID
+    website = CharField(null=True, unique=True)
+    discord_id = CharField(null=False, unique=True)  # Discord ID of the user that created the club
+    discord_server_id = IntegerField(null=True)  # Discord server ID like 1317875072089981022
+    active = BooleanField(default=True)
+    note = CharField(null=True)
+    created_at = DateTimeField(default=datetime.now)
+    updated_at = DateTimeField(default=datetime.now)
+
+    def save(self, *args, **kwargs):
         """Override save to update timestamp."""
         self.updated_at = datetime.now()
-        await super().save(*args, **kwargs)
-
-    @classmethod
-    async def is_registered(cls, ctx, fail_message: str = "You must be a registered rider to perform this action."):
-        """Check if a rider is registered."""
-        try:
-            logfire.info(f"Checking if user {ctx.author} is a registered rider.")
-            rider = await cls.find_one({"discord_id": ctx.author.id})
-            if not rider:
-                logfire.info(f"User {ctx.author} is not a registered rider.")
-                await ctx.response.send_message(fail_message, ephemeral=True)
-                return False
-            return True
-        except Exception as e:
-            logfire.error(f"Failed to check if user is registered: {e}")
-            await ctx.response.send_message("❌ Failed to check if user is registered.", ephemeral=True)
-            return False
-
-    class Settings:  # NOQA
-        name = "riders"
-        indexes = [  # noqa: RUF012
-            IndexModel([("name", ASCENDING)], unique=True),
-            IndexModel([("zwid", ASCENDING)], unique=True),
-            IndexModel([("discord_id", ASCENDING)], unique=True),
-        ]
+        super().save(*args, **kwargs)
 
 
-class Org(Document):
-    """Club and team and other model."""
+class Team(BaseModel):
+    """Team model."""
 
-    org_type: Literal["club", "team"]
-    name: str = Field(min_length=3, max_length=50)
-    discord_id: str | None = None  # Discord id of the user that created the club
-    zp_club_id: int | None = None  # Optional Zwift Power team (club) id
-    active: bool = True
-    note: str | None = None
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
+    name = CharField(unique=True, index=True, max_length=50)
+    discord_id = CharField(null=False)  # Discord ID of the user that created the team
+    active = BooleanField(default=True)
+    note = CharField(null=True)
+    club_id = ForeignKeyField(Club, backref="teams", null=True, on_delete="CASCADE")  # ForeignKey for club
+    created_at = DateTimeField(default=datetime.now)
+    updated_at = DateTimeField(default=datetime.now)
 
-    async def save(self, *args, **kwargs) -> None:
+    def save(self, *args, **kwargs):
         """Override save to update timestamp."""
         self.updated_at = datetime.now()
-        await super().save(*args, **kwargs)
+        super().save(*args, **kwargs)
 
-    @classmethod
-    async def new_org(
-        cls, discord_id: int, org_type: Literal["club", "team"], name: str, zp_club_id: int | None = None
-    ) -> tuple[Optional["Org"], NewOrgMessage]:
-        """Create a new club or team."""
-        with logfire.span("New Org"):
-            existing_org = await cls.find_one({"name": name})
-            if existing_org:
-                logfire.info(f"Org already exists: {existing_org}")
-                return (None, NewOrgMessage.DUPLICATE)
-            try:
-                org = cls.model_validate(
-                    {"org_type": org_type, "name": name, "discord_id": str(discord_id), "zp_club_id": zp_club_id}
-                )
-            except Exception as e:
-                logfire.error(f"Failed to validate new org: {e}")
-                return None, NewOrgMessage.ERROR
-            rider = await Rider.find_one({"discord_id": discord_id})
-            mem_type: MembType = MembType.CLUB_ADMIN if org_type == "club" else MembType.TEAM_ADMIN
+    @property
+    def members(self, as_dict: bool = False):
+        """Return all users that are members of this team."""
+        users = User.select().where(User.team_id == self.id)
+        if not as_dict:
+            return users
+        else:
+            return [model_to_dict(user) for user in users]
 
-            #####
-            try:
-                await org.save()
-                logfire.info("New ORG SAVED")
-                new_org = await Org.find_one({"name": name})  # The name is unique
-                logfire.info("Retrieve new Org")
-
-                logfire.info(f"Add Membership for {rider} to {new_org}")
-                await Membership.add_remove_membership(
-                    action="add", rider=rider, org_id=str(new_org.id), membership_type=mem_type
-                )
-                return org, NewOrgMessage.SUCCESS
-            except Exception:
-                logfire.error("Failed to creat new org and admin", exc_info=True)
-                return None, NewOrgMessage.ERROR
-
-    class Settings:  # NOQA
-        name = "orgs"
-        indexes = [  # noqa: RUF012
-            IndexModel([("name", ASCENDING)], unique=True),
-            IndexModel([("zp_club_id", ASCENDING)], unique=True),
-            IndexModel([("discord_id", ASCENDING)], unique=True),
-        ]
+    @property
+    def admins(self, as_dict: bool = False):
+        """Return all users that are members of this team."""
+        admins = User.select().where(User.team_id == self and User.team_admin)
+        if not as_dict:
+            return admins
+        else:
+            return [model_to_dict(user) for user in admins]
 
 
-class Membership(Document):
-    """Membership records for clubs and teams.
+class User(BaseModel):
+    """User model for the database."""
 
-    MembType = Literal["club_admin", "team_admin", "team_member", "club_member"]
-    """
+    name = CharField(unique=True, null=False, max_length=50)
+    zwid = IntegerField(unique=True, null=False)
+    discord_id = BigIntegerField(unique=True, null=False, index=True)
+    discord_name = CharField(unique=True)
+    tos = BooleanField(default=False)
+    active = BooleanField(default=True)
+    club_id = ForeignKeyField(Club, backref="users", null=True, on_delete="SET NULL")
+    club_admin = BooleanField(default=False)
+    team_id = ForeignKeyField(Team, backref="users", null=True, on_delete="SET NULL")
+    team_admin = BooleanField(default=False)
+    created_at = DateTimeField(default=datetime.now)
+    updated_at = DateTimeField(default=datetime.now)
 
-    membership_type: MembType
-    org_id: str
-    rider_id: str
-    discord_id: int
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
-
-    async def save(self, *args, **kwargs) -> None:  # NOQA
+    def save(self, *args, **kwargs):
+        """Override save to update timestamp."""
         self.updated_at = datetime.now()
-        await super().save(*args, **kwargs)
+        super().save(*args, **kwargs)
 
-    @classmethod
-    async def get_user_membership(
-        cls,
-        membership_type: set[MembType],
-        discord_id: int | None = None,
-        rider_id: str | None = None,
-        rider: Rider | None = None,
-    ) -> list[Org | None]:
-        """Find all clubs where the given user (discord_id or rider_id or Rider) is an admin."""
+    def create_club(
+        self,
+        club_name: str,
+        zp_club_id: int | None = None,
+        website: str | None = None,
+        discord_server_id: int | None = None,
+        **kwargs,
+    ) -> Club:
+        """Create a new club and assign the current user as the club admin.
+
+        :param club_name: Name of the club to be created.
+        :param kwargs: Additional fields for the Club model.
+        :return: The created Club object.
+        """
         try:
-            if rider is not None:
-                discord_id = str(rider.discord_id)
-                rider_id = str(rider.id)
-            logfire.info(f"Get Membership Orgs for user: {membership_type}, {discord_id}, {rider_id}, {rider}")
-            query_filter = {
-                "$or": [{"discord_id": discord_id}, {"rider_id": rider_id}],
-                "membership_type": {"$in": list(membership_type)},
-            }
-            org_ids = [org.org_id for org in await cls.find(query_filter).to_list()]
-            org_ids = [ObjectId(org_id) for org_id in org_ids]
-            logfire.info(f"Membership Orgs: {org_ids}")
-            orgs = await Org.find({"_id": {"$in": org_ids}}).to_list()
-            logfire.info(f"Found user is a member if these orgs: {orgs}")
-            return orgs
-        except Exception as e:
-            logfire.error(f"Failed to get user membership: {e}", exc_info=True)
-
-    @classmethod
-    async def add_remove_membership(
-        cls,
-        action: Literal["add", "remove"],
-        membership_type: MembType,
-        ctx: Any | None = None,
-        org: Org | None = None,
-        org_id: str | None = None,
-        discord_id: int | None = None,
-        rider_id: str | None = None,
-        rider: Rider | None = None,
-    ) -> Optional["Membership"]:
-        """Add a new Club admin record."""
-        with logfire.span("Add Membership"):
-            # if not isinstance(discord_id, int) or discord_id <= 0:
-            #     logfire.error(f"Invalid 'discord_id' provided. {discord_id}")
-            #     raise ValueError("Invalid 'discord_id' provided.")
-            if rider is not None:
-                discord_id = rider.discord_id
-                rider_id = rider.id
-            if ctx is not None:  # noqa
-                if not await Rider.is_registered(ctx):
-                    return
-
-            if not rider_id:
-                rider_id = await Rider.find_one({"discord_id": discord_id})
-                if not rider_id:
-                    logfire.notice(f"Rider ID {discord_id} not found")
-                    return
-
-            if org is not None:
-                org_id = org.id
-            try:
-                logfire.info(f"Prepare membership_obj for {membership_type}, {org_id}, {rider_id}, {discord_id}")
-                new_mem_dict = {
-                    "membership_type": membership_type,
-                    "org_id": str(org_id),
-                    "rider_id": str(rider_id),
-                    "discord_id": int(discord_id),
-                }
-                new_membership = cls.model_validate(new_mem_dict)
-            except Exception as e:
-                logfire.error(f"Failed to validate membership object: {e!s}")
-                logfire.error(f"Unexpected error: {e}", exc_info=True)
-                return
-            logfire.info("Check for existing membership")
-            existing_membership = await cls.find(
-                {
-                    "$and": [
-                        {"membership_type": membership_type},
-                        {"org_id": str(org_id)},
-                        {"rider_id": str(rider_id)},
-                        {"discord_id": int(discord_id)},
-                    ]
-                }
-            ).first_or_none()
-            if existing_membership is not None:
-                logfire.info(f"Membership exists for {membership_type}")
-                existing_membership.membership_type = membership_type
-                await existing_membership.save()
-            else:
-                logfire.info(f"Non found Adding membership for {new_membership}")
-                await new_membership.save()
-                return new_membership
-
-    class Settings:  # NOQA
-        name = "membership"
-        indexes = [  # noqa: RUF012
-            IndexModel(
-                [("membership_type", ASCENDING), ("discord_id", ASCENDING), ("org_id", ASCENDING)],
-                unique=True,
-                name="unique_membership",
+            new_club = Club.create(
+                name=club_name,
+                discord_id=self.discord_id,
+                zp_club_id=zp_club_id,
+                website=website,
+                discord_server_id=discord_server_id,
+                **kwargs,
             )
-        ]
+            self.club_id = new_club
+            self.club_admin = True
+            self.save()
+            return new_club
+        except IntegrityError as e:
+            logfire.error(f"Failed to create club: IntegrityError: {e}", exc_info=True)
+            raise e
+
+    def create_team(self, team_name: str, join: bool = False, **kwargs) -> Team:
+        """Create a new team and assign the current user as the team admin.
+
+        :param team_name: Name of the team to be created.
+        :param kwargs: Additional fields for the Team model.
+        :return: The created Team object.
+        """
+        if self.club_id is None:
+            logfire.error(f"User {self.name} does not belong to a club.")
+            raise NoClubMembership("User must belong to a club to create a team.")
+
+        if not self.club_admin:
+            logfire.error(f"User {self.name} is not a club admin.")
+            raise NotAClubAdmin("User must be a club admin to create a team.")
+        try:
+            new_team = Team.create(name=team_name, discord_id=self.discord_id, club_id=self.club_id, **kwargs)
+            if join:
+                self.team_id = new_team
+                self.team_admin = True
+                self.save()
+            return new_team
+        except IntegrityError as e:
+            logfire.error(f"Failed to create team: IntegrityError: {e}", exc_info=True)
+            raise e
+
+    def add_user_to_club(self, discord_id: int):
+        """Add a user to a club. The club you are an admin of."""
+        if not self.club_admin:
+            logfire.error(f"User {self.name} is not a club admin.")
+            raise NotAClubAdmin("User must be a club admin to create a team.")
+
+        user = User.get_or_none(discord_id=discord_id)
+        if user is None:
+            logfire.error(f"User with Discord ID {discord_id} not found.")
+            raise UserNotRegistered("Discord user needs to register")
+        if user.club is not None:
+            logfire.error(f"User {user.name} is already in a club.")
+            raise UserAlreadyInClub("Discord user already in a club")
+        user.club_id = self.club_id
+        user.save()
+        logfire.info(f"User {user.name} added to club {self.club_id}.")
+
+    def add_user_to_team(self, discord_id: int, team_name: str | None = None):
+        """Add a user to a team. The team you are an admin of or any team in your club, if you a club admin."""
+        team = Team.get_or_none(name=team_name)
+        if not team_name and (self.team_id != team.id or not self.team_admin):
+            logfire.error(f"User {self.name} is not a club admin.")
+            raise NotATeamAdmin("User must be a club admin to create a team.")
+
+        if self.team_id != team.id and self.team_admin:
+            logfire.error(f"User {self.name} is not a team admin for {team_name}.")
+            raise NotATeamAdmin("User must be a team admin to add a user to a team.")
+
+        team = Team.get_or_none(name=team_name)
+        if team is None:
+            logfire.error(f"Team {team_name} not found.")
+            raise TeamNotFound("Team not found")
+        user = User.get_or_none(discord_id=discord_id)
+        if user is None:
+            logfire.error(f"User with Discord ID {discord_id} not found.")
+            raise UserNotRegistered("Discord user needs to register")
+        if user.team is not None:
+            logfire.error(f"User {user.name} is already in a team.")
+            raise UserAlreadyOnTeam("Discord user already in a team")
+        user.team_id = team.id
+        user.save()
+        logfire.info(f"User {user.name} added to team {team_name}.")
+
+    @property
+    def zp_url(self, markdown: bool = True):
+        """Return the Zwift Power URL for the user."""
+        if markdown:
+            return f"[View Profile](https://zwiftpower.com/profile.php?z={self.zwid})"
+        else:
+            return f"https://zwiftpower.com/profile.php?z={self.zwid}"
+
+    @property
+    def zr_url(self, markdown: bool = True):
+        """Return the Zwift Racing URL for the user."""
+        if markdown:
+            return f"[View Profile](https://www.zwiftracing.app/riders/{self.zwid})"
+        else:
+            return f"https://www.zwiftracing.app/riders/{self.zwid}"
+
+    @property
+    def profile(self):
+        """User profile."""
+        return {
+            "Name": self.name,
+            "zwid": self.zwid,
+            "ZR Profile": self.zr_url,
+            "ZP Profile": self.zp_url,
+            "Discord ID": self.discord_id,
+            "Discord Name": self.discord_name,
+            "TOS": self.tos,
+            "Active": self.active,
+            "Club": self.club_id.name if self.club_id else "No Club",
+            "Is Club admin": self.club_admin,
+            "Team": self.team_id.name if self.team_id else "No Team",
+            "Is Team admin": self.team_admin,
+            "Registered": self.created_at.date().isoformat(),
+            "Updated": self.updated_at.date().isoformat(),
+        }
+
+    @classmethod
+    def lookup(cls, discord_id: int):
+        """Lookup a user by Discord ID."""
+        user = User.get_or_none(discord_id=discord_id)
+        if user is None:
+            logfire.error(f"User with Discord ID {discord_id} not found.")
+            raise UserNotRegistered("Discord user needs to register")
+        return user.profile
 
 
-###############
+# Initialize the database and create the tables
+def init_peewee_db():
+    """Initialize the Peewee database."""
+    try:
+        db.connect()
+        db.create_tables([User, Club, Team])
+        logfire.info("Database initialized and tables created.")
+        db.close()
+    except OperationalError as e:
+        logfire.error(f"Initialize the database: {e}", exc_info=True)
+        # raise e
+
+
+# if __name__ == "__main__":
+#     init_peewee_db()
+#
+# # Example usage to create a user and associated club
+# print("Creating a user and a club...")
+# user = User.create(
+#     name="Test User 3",
+#     zwid=12345678,
+#     discord_id=12345678,
+#     discord_name="Test User 3",
+# )
+# print(user)
+# club = user.create_club(club_name="Test Club 3", note="This is a test club")
+# print(f"User {user.name} created club: {club.name}")
+
+# for k, v in model_to_dict(User.get_or_none(zwid=12345678)).items():
+#     print(f"{k}: {v}")
+# user = User.get_or_none(zwid=12345678)
+# user = User.get_or_none(User.discord_id == 12345678)
+# print(user)
+# user = User.lookup(12345678)
+# print(user)
+# team = user.create_team("Test Team 6")
+# print(team)
+# print(team.id == 6)
+
+# team = Team.get_or_none(Team.discord_id == 12345678)
+# print([t for t in team.admins])
