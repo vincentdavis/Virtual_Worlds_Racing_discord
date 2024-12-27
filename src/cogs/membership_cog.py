@@ -2,72 +2,82 @@ import discord
 import logfire
 from discord.ext import commands
 
-from src.database.db_models_mongo import Membership, MembType, Rider
+from src.database.db_models import User
+from src.vwr_exceptions import NotAClubAdmin, UserNotRegistered
 
 
 class MembershipCog(commands.Cog):
     """Club related cogs."""
 
-    @discord.user_command(name="Club: add admin")
-    async def add_admin(self, ctx, target_user: discord.Member):
-        """Add the invoking user to the list of admins for a selected club."""
-        logfire.info("Add Admin to Club")
-        try:
-            if not await Rider.is_registered(ctx):
-                return
+    @discord.user_command(name="Club: Add as admin")
+    async def add_club_admin(self, ctx, target_user: discord.Member):
+        """Add the selected user to the list of admins for a selected club."""
+        with logfire.span("Add Admin to Club"):
+            logfire.info(f"Target user: {target_user}")
+            try:
+                target_user_obj = User.get_or_none(User.discord_id == target_user.id)
+                requesting_user_obj = User.get_or_none(User.discord_id == ctx.author.id)
+                if not target_user_obj:
+                    logfire.error("Target User not found")
+                    raise UserNotRegistered(f"{target_user} Is not registered")
 
-            rider = await Rider.find_one({"discord_id": ctx.author.id})
-            logfire.info(f"Rider: {rider} with id: {rider.id}")
-            if not rider:
-                await ctx.respond(f"❌ Rider profile not found for user {discord.Member}.", ephemeral=True)
-                return
-
-            admin_clubs = await Membership.get_user_membership(
-                membership_type={
-                    MembType.CLUB_ADMIN,
-                },
-                rider=rider,
-            )
-            logfire.info(f"Admin Clubs: {admin_clubs}")
-            if not admin_clubs:
-                await ctx.respond("❌ You are not listed as an admin for any clubs.", ephemeral=True)
-                return
-
-            options = [discord.SelectOption(label=club.name, value=str(club.id)) for club in admin_clubs]
-            if not options:
-                await ctx.respond("❌ No clubs are available for admin modification.", ephemeral=True)
-                return
-
-            select_menu = discord.ui.Select(
-                placeholder="Select a club to add yourself as an admin...",
-                options=options,
-            )
+                if not requesting_user_obj.club_admin:
+                    logfire.error("Requesting User is not a club admin")
+                    raise NotAClubAdmin(f"{ctx.author} is not a club admin")
+                if target_user_obj.club_id != requesting_user_obj.club_id:
+                    logfire.error(f"Target User is not in the club: {requesting_user_obj.club_id.name}")
+                    raise NotAClubAdmin(f"{target_user} is not in a club")
+            except Exception as e:
+                logfire.error(f"Failed to add admin to club: {e}")
+                return await ctx.respond("❌ An error occurred while adding admin.", ephemeral=True)
 
             async def callback(interaction):
-                selected_club_id = interaction.data["values"][0]
-                logfire.info(f"Selected Club ID: {selected_club_id}")
-                await Membership.add_remove_membership(
-                    action="add",
-                    membership_type=MembType.CLUB_ADMIN,
-                    discord_id=target_user.id,
-                    org_id=selected_club_id,
-                )
-                ctx.response(
-                    "✅ '{target_user.display_name}' has been added as an admin to club '{selected_club.name}'.",
-                    ephemeral=True,
-                )
+                try:
+                    target_user_obj.club_admin = True
+                    target_user_obj.update()
+                    ctx.response(
+                        "✅ '{target_user.display_name}' has been added as an admin to club '{selected_club.name}'.",
+                        ephemeral=True,
+                    )
+                except Exception as e:
+                    logfire.error(f"Failed to add admin to club: {e}")
+                    # raise e
+                    await ctx.respond("❌ An error occurred while adding admin.", ephemeral=True)
 
-            select_menu.callback = callback
-            view = discord.ui.View()
-            view.add_item(select_menu)
+    @discord.user_command(name="Team: Add as admin")
+    async def add_team_admin(self, ctx, target_user: discord.Member):
+        """Add the selected user to the list of admins for a selected club."""
+        with logfire.span("Add Admin to Team"):
+            logfire.info(f"Target user: {target_user}")
+            try:
+                target_user_obj = User.get_or_none(User.discord_id == target_user.id)
+                requesting_user_obj = User.get_or_none(User.discord_id == ctx.author.id)
+                if not target_user_obj:
+                    logfire.error("Target User not found")
+                    raise UserNotRegistered(f"{target_user} Is not registered")
 
-            await ctx.send("Please select a club:", view=view)
+                if not requesting_user_obj.club_admin:
+                    logfire.error("Requesting User is not a team admin")
+                    raise NotAClubAdmin(f"{ctx.author} is not a team admin")
+                if target_user_obj.club_id != requesting_user_obj.club_id:
+                    logfire.error(f"Target User is not in the team: {requesting_user_obj.club_id.name}")
+                    raise NotAClubAdmin(f"{target_user} is not in a tea")
+            except Exception as e:
+                logfire.error(f"Failed to add admin to tea: {e}")
+                return await ctx.respond("❌ An error occurred while adding admin.", ephemeral=True)
 
-        except Exception as e:
-            logfire.error(f"Failed to add admin to club: {e}")
-            # raise e
-            await ctx.respond("❌ An error occurred while adding admin.", ephemeral=True)
-
+            async def callback(interaction):
+                try:
+                    target_user_obj.club_admin = True
+                    target_user_obj.update()
+                    ctx.response(
+                        f"✅ '{target_user.display_name}' has been added as an admin to team'.",
+                        ephemeral=True,
+                    )
+                except Exception as e:
+                    logfire.error(f"Failed to add admin to team: {e}")
+                    # raise e
+                    await ctx.respond("❌ An error occurred while adding admin.", ephemeral=True)
 
 def setup(bot):
     """Pycord calls to setup the cog."""

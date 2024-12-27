@@ -24,6 +24,23 @@ class OrgCog(commands.Cog):
                 logfire.error(f"Failed to create club: {e}", exc_info=True)
                 await ctx.response.send_message("❌ Failed to create club.", ephemeral=True)
 
+    @discord.command(name="team_create")
+    async def create_team(self, ctx):
+        """Create a new Team. PRES ENTER."""
+        org_type:str = "team"
+        with logfire.span(f"CREATE {org_type.capitalize()}"):
+            try:
+                if not await check_channel(
+                        ctx, ["team-admin"], f"This command can only be used in the `#{org_type}-admin` channel."
+                ):
+                    return
+                create_form = CreateOrgForm(ctx, org_type=org_type)
+                await ctx.response.send_modal(create_form)
+            except Exception as e:
+                logfire.error(f"Failed to create {org_type.capitalize()}: {e}", exc_info=True)
+                await ctx.response.send_message(f"❌ Failed to create {org_type.capitalize()}.", ephemeral=True)
+
+
 
 def setup(bot):
     """Pycord calls to setup the cog."""
