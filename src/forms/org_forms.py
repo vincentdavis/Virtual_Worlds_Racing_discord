@@ -3,9 +3,9 @@ import re
 import discord
 import logfire
 
-from src.cats_and_chans import create_on_guild
 from src.database.db_models import User
-from src.vwr_exceptions import UserNotRegistered
+from src.extras.channel_mgnt import create_on_guild
+from src.extras.vwr_exceptions import UserNotRegistered
 
 
 class CreateOrgForm(discord.ui.Modal):

@@ -3,7 +3,7 @@ import logfire
 from discord.ext import commands
 
 from src.database.db_models import User
-from src.vwr_exceptions import NotAClubAdmin, UserNotRegistered
+from src.extras.vwr_exceptions import NotAClubAdmin, UserNotRegistered
 
 
 class MembershipCog(commands.Cog):
@@ -78,6 +78,7 @@ class MembershipCog(commands.Cog):
                     logfire.error(f"Failed to add admin to team: {e}")
                     # raise e
                     await ctx.respond("❌ An error occurred while adding admin.", ephemeral=True)
+
 
 def setup(bot):
     """Pycord calls to setup the cog."""

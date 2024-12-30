@@ -15,6 +15,7 @@ async def create_on_guild(ctx, org_type: str, club_name: str | None = None, team
 
             logfire.info("Create Text channel under the 'CLUBS' category")
             club_channel = await guild.create_text_channel(name=club_name, category=category)
+            club_channel = await guild.create_role(name=club_name, category=category)
 
             logfire.info("Club channel created")
             await ctx.respond(

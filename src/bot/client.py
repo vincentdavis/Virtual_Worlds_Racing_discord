@@ -63,10 +63,3 @@ def init_bot():
             raise ValueError("No token found! Make sure to set DISCORD_BOT_TOKEN in your .env file.")
         bot.run(TOKEN)
         logfire.info("Bot started: if your here it has stopped")
-
-
-# if __name__ == "__main__":
-#     print(pycord.__version__)
-#     TOKEN = os.getenv("DISCORD_BOT_TOKEN")
-#     if not TOKEN:
-#         raise ValueError("No token found! Make sure to set DISCORD_BOT_TOKEN in your .env file."

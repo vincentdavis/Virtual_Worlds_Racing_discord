@@ -20,7 +20,7 @@ from playhouse.db_url import connect
 from playhouse.shortcuts import model_to_dict
 from psycopg2 import OperationalError
 
-from src.vwr_exceptions import (
+from src.extras.vwr_exceptions import (
     NoClubMembership,
     NotAClubAdmin,
     NotATeamAdmin,
@@ -69,9 +69,11 @@ class Club(BaseModel):
     zp_club_id = IntegerField(null=True, unique=True)  # Optional Zwift Power team (club) ID
     website = CharField(null=True, unique=True)
     discord_id = CharField(null=False, unique=True)  # Discord ID of the user that created the club
-    discord_server_id = IntegerField(null=True)  # Discord server ID like 1317875072089981022
+    discord_server_id = BigIntegerField(null=True)  # Discord server ID like 1317875072089981022
     active = BooleanField(default=True)
     note = CharField(null=True)
+    discord_channel_id = BigIntegerField(null=True)
+    discord_role_id = BigIntegerField(null=True)
     created_at = DateTimeField(default=datetime.now)
     updated_at = DateTimeField(default=datetime.now)
 
@@ -89,6 +91,8 @@ class Team(BaseModel):
     active = BooleanField(default=True)
     note = CharField(null=True)
     club_id = ForeignKeyField(Club, backref="teams", null=True, on_delete="CASCADE")  # ForeignKey for club
+    discord_channel_id = BigIntegerField(null=True)
+    discord_role_id = BigIntegerField(null=True)
     created_at = DateTimeField(default=datetime.now)
     updated_at = DateTimeField(default=datetime.now)
 
@@ -100,7 +104,7 @@ class Team(BaseModel):
     @property
     def members(self, as_dict: bool = False):
         """Return all users that are members of this team."""
-        users = User.select().where(User.team_id == self.id)
+        users = User.select().where(User.team_id == self)
         if not as_dict:
             return users
         else:
@@ -148,6 +152,9 @@ class User(BaseModel):
         """Create a new club and assign the current user as the club admin.
 
         :param club_name: Name of the club to be created.
+        :param zp_club_id: Optional Zwift Power team (club) ID.
+        :param website: Optional website for the club.
+        :param discord_server_id: Optional Discord server ID.
         :param kwargs: Additional fields for the Club model.
         :return: The created Club object.
         """
@@ -172,6 +179,7 @@ class User(BaseModel):
         """Create a new team and assign the current user as the team admin.
 
         :param team_name: Name of the team to be created.
+        :param join: Join the team as an admin.
         :param kwargs: Additional fields for the Team model.
         :return: The created Team object.
         """

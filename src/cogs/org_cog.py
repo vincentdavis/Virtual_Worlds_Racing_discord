@@ -1,15 +1,26 @@
-import discord
 import logfire
 from discord.ext import commands
 
+from src.extras.untils import check_channel
 from src.forms.org_forms import CreateOrgForm
-from src.untils import check_channel
 
 
 class OrgCog(commands.Cog):
     """Club related cogs."""
 
-    @discord.command(name="club_create")
+    @commands.group(name="Clubs:", description="Club management commands.")
+    async def clubs(self, ctx):
+        """Parent command for organization-related subcommands."""
+        if not ctx.subcommand_passed:
+            await ctx.respond("Please specify a subcommand! Use `/Clubs: help` for details.", ephemeral=True)
+
+    @commands.group(name="Teams:", description="Team management commands.")
+    async def teams(self, ctx):
+        """Parent command for organization-related subcommands."""
+        if not ctx.subcommand_passed:
+            await ctx.respond("Please specify a subcommand! Use `/Clubs: help` for details.", ephemeral=True)
+
+    @clubs.command(name="create")
     async def create_club(self, ctx):
         """Create a new Club. PRES ENTER."""
         with logfire.span("CREATE CLUB"):
@@ -24,14 +35,14 @@ class OrgCog(commands.Cog):
                 logfire.error(f"Failed to create club: {e}", exc_info=True)
                 await ctx.response.send_message("❌ Failed to create club.", ephemeral=True)
 
-    @discord.command(name="team_create")
+    @teams.command(name="team_create")
     async def create_team(self, ctx):
         """Create a new Team. PRES ENTER."""
-        org_type:str = "team"
+        org_type: str = "team"
         with logfire.span(f"CREATE {org_type.capitalize()}"):
             try:
                 if not await check_channel(
-                        ctx, ["team-admin"], f"This command can only be used in the `#{org_type}-admin` channel."
+                    ctx, ["team-admin"], f"This command can only be used in the `#{org_type}-admin` channel."
                 ):
                     return
                 create_form = CreateOrgForm(ctx, org_type=org_type)
@@ -39,7 +50,6 @@ class OrgCog(commands.Cog):
             except Exception as e:
                 logfire.error(f"Failed to create {org_type.capitalize()}: {e}", exc_info=True)
                 await ctx.response.send_message(f"❌ Failed to create {org_type.capitalize()}.", ephemeral=True)
-
 
 
 def setup(bot):
