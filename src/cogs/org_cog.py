@@ -1,3 +1,4 @@
+import discord
 import logfire
 from discord.ext import commands
 
@@ -8,19 +9,14 @@ from src.forms.org_forms import CreateOrgForm
 class OrgCog(commands.Cog):
     """Club related cogs."""
 
-    @commands.group(name="Clubs:", description="Club management commands.")
-    async def clubs(self, ctx):
-        """Parent command for organization-related subcommands."""
-        if not ctx.subcommand_passed:
-            await ctx.respond("Please specify a subcommand! Use `/Clubs: help` for details.", ephemeral=True)
+    def __init__(self, bot):  # this is a special method that is called when the cog is loaded
+        self.bot = bot
 
-    @commands.group(name="Teams:", description="Team management commands.")
-    async def teams(self, ctx):
-        """Parent command for organization-related subcommands."""
-        if not ctx.subcommand_passed:
-            await ctx.respond("Please specify a subcommand! Use `/Clubs: help` for details.", ephemeral=True)
+    clubs = discord.SlashCommandGroup("club", "Club management commands.")
+    teams = discord.SlashCommandGroup("team", "Team management commands.")
 
     @clubs.command(name="create")
+    @commands.check(lambda ctx: discord.utils.get(ctx.author.roles, name="REGISTERED"))
     async def create_club(self, ctx):
         """Create a new Club. PRES ENTER."""
         with logfire.span("CREATE CLUB"):
@@ -35,7 +31,8 @@ class OrgCog(commands.Cog):
                 logfire.error(f"Failed to create club: {e}", exc_info=True)
                 await ctx.response.send_message("❌ Failed to create club.", ephemeral=True)
 
-    @teams.command(name="team_create")
+    @teams.command(name="create")
+    @commands.check(lambda ctx: discord.utils.get(ctx.author.roles, name="REGISTERED"))
     async def create_team(self, ctx):
         """Create a new Team. PRES ENTER."""
         org_type: str = "team"
@@ -54,7 +51,12 @@ class OrgCog(commands.Cog):
 
 def setup(bot):
     """Pycord calls to setup the cog."""
-    bot.add_cog(OrgCog(bot))  # add the cog to the bot
+    try:
+        bot.add_cog(OrgCog(bot))  # add the cog to the bot
+        logfire.info("OrgCog loaded successfully.")
+    except Exception as e:
+        logfire.error(f"Failed to load OrgCog: {e}", exc_info=True)
+        raise e
 
 
 # # Add a team to a club

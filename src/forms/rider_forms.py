@@ -2,6 +2,7 @@ import discord
 import logfire
 
 from src.database.db_models import User
+from src.extras.roles_mgnt import BaseRole, add_base_role
 
 
 class RegistrationForm(discord.ui.Modal):
@@ -9,7 +10,6 @@ class RegistrationForm(discord.ui.Modal):
 
     def __init__(self) -> None:
         super().__init__(title="Registration Form")
-        # Display instructions at the top
 
         self.name = discord.ui.InputText(
             label="Full Name", placeholder="Enter your name...", min_length=3, max_length=50, required=True
@@ -17,7 +17,7 @@ class RegistrationForm(discord.ui.Modal):
         self.add_item(self.name)
 
         self.zwid = discord.ui.InputText(
-            label="Zwift ID Number", placeholder="Enter your Zwift ID", min_length=1, max_length=20, required=True
+            label="Zwift ID Number", placeholder="Enter your Zwift ID", min_length=1, max_length=50, required=True
         )
         self.add_item(self.zwid)
 
@@ -47,6 +47,7 @@ class RegistrationForm(discord.ui.Modal):
                     tos = True
                 zwid_int = int(self.zwid.value)
                 # Check if user is already registered
+                # NOTE: We don't need to do this because we check on the slah command for the role
                 existing_discord = User.get_or_none(User.discord_id == interaction.user.id)
                 if existing_discord:
                     await interaction.response.send_message(
@@ -94,7 +95,9 @@ class RegistrationForm(discord.ui.Modal):
                     tos=tos,
                     active=True,
                 )
+                await add_base_role(interaction, interaction.user.id, BaseRole.REGISTERED)
                 # Send confirmation
+                # TODO: Sould send the rider lookup view
                 logfire.info(f"Sending confirmation to {interaction.user}")
                 embed = discord.Embed(title="✅ Registration Successful!", color=discord.Color.green())
                 embed.add_field(name="Name", value=self.name.value, inline=True)
@@ -103,9 +106,9 @@ class RegistrationForm(discord.ui.Modal):
 
                 # Log registration
                 logfire.info(f"Logging registration for {interaction.user}")
-                log_channel = discord.utils.get(interaction.guild.channels, name="registrations")
+                log_channel = discord.utils.get(interaction.guild.channels, name="activity_logs")
                 if log_channel:
-                    await log_channel.send(f"New registration: {interaction.user.mention}")
+                    await log_channel.send(embed=embed)
 
             except ValueError:
                 await interaction.response.send_message("❌ Zwift ID be a valid number.", ephemeral=True)

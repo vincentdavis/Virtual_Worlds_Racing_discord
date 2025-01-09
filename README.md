@@ -1,8 +1,43 @@
-# Virtual Worlds Racing Discord Bot
+# 🚴 Virtual Worlds Racing Discord Bot
 
 A Discord bot designed to manage Zwift racing communities, providing registration, club management, and team organization features.
 
-## 🚴 Features
+
+## Implemented Features
+
+### Discord server setup:
+- **Setup Roles:**
+    - REGISTERED: Ths is a Role a user gets when they are registered.
+    - **Automatically created roles:**
+    - CLUB_<club_name>_ADMIN: This is a role for the club admin.
+    - CLUB_<club_name>_MEMBER: This is a role for the club member.
+    - TEAM_<club_name>_ADMIN: This is a role for the team admin.
+- **Setup Categories and Channels:**
+    - Channel: activity_logs, Logs most user membership activity, register, join/leave club/team.
+    - Category: RIDERS, This is where all the rider channels are created.
+    - Channel: Rider_help.
+    - Category: CLUBS, This is where all the club channels are created.
+    - Channel: club-<club_name>, Automatically created. This is a channel for the club, only club members can see this channel.
+    - Category: TEAMS, This is where all the team channels are created.
+    - Channel: team-<team_name>, Automatically created. This is a channel for the team, only team members can see this channel. All club member can access all team channels.
+    - 
+    - 
+    
+### User, Rider, Racer managment:
+- **Registration System**
+- The splash command can only be used in the welcome-adn-rules channel
+- **Rider Profile**
+    - Secure rider registration with Zwift ID verification. (1)
+    - Terms of Service and Privacy Policy acceptance
+    - Duplicate registration prevention
+    - Profile linking with ZwiftPower and ZwiftRacing
+
+
+### Notes
+1. We try to limit the data related to a Zwift_ID (zwid), until the user has participated in a race, thus verifing there zwid. 
+
+
+## Plan
 
 ### Rider Management
 - **Registration System**

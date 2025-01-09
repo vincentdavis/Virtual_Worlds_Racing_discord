@@ -1,6 +1,7 @@
 """Utility functions for the project."""
-
+import discord
 import logfire
+import discord.ext.commands
 
 # async def is_registered(ctx, fail_message: str = "You must be a registered rider to perform this action."):
 #     """Check if a rider is registered."""
@@ -32,3 +33,9 @@ async def check_channel(ctx, channel_names: list, fail_message: str):
         logfire.error(f"Failed to check channel: {e}")
         await ctx.response.send_message("❌ Failed to check channel.", ephemeral=True)
         return False
+
+def check_role(ctx:discord.ext.commands.Context, role:str):
+    """Check that the user has a role, used to restrict slash commands"""
+    has_role = role in [role.name for role in ctx.author.roles]
+    return has_role
+

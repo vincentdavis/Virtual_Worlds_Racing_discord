@@ -52,9 +52,10 @@ def init_bot():
             await ctx.respond(f"Hello {name}!")
             logfire.info(f"Hello {name}! Done")
 
-        bot.load_extension("src.cogs.rider_cog")
+        bot.load_extension("src.cogs.user_cog")
+        # bot.load_extension("src.cogs.administrator_cog")
         # bot.load_extension("src.cogs.membership_cog")
-        bot.load_extension("src.cogs.org_cog")
+        # bot.load_extension("src.cogs.org_cog")
 
         logfire.info("Get: DISCORD_BOT_TOKEN")
         TOKEN = getenv("DISCORD_BOT_TOKEN")

@@ -5,8 +5,7 @@ description = "Virtual Worlds Racing Discord Bot"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "beanie>=1.28.0",
-    "logfire>=2.7.1",
+    "logfire>=2.11.1",
     "peewee>=3.17.8",
     "psycopg2-binary>=2.9.10",
     "py-cord>=2.6.1",

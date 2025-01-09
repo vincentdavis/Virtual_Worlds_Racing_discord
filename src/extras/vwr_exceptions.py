@@ -15,10 +15,10 @@
 #         return "User is not registered."
 
 
-
 class NoClubMembership(Exception):
     """Exception raised when a user does not belong to a club."""
-    def __init__(self, discord_id:int|None=None, additional_message:str|None=None):
+
+    def __init__(self, discord_id: int | None = None, additional_message: str | None = None):
         # Initialize with optional parameters
         self.discord_id = discord_id
         self.additional_message = additional_message
@@ -53,7 +53,13 @@ class UserAlreadyInClub(Exception):
 
 
 class TeamNotFound(Exception):
-    """Exception raised when a Team name not found"""
+    """Exception raised when a Team name, id, ....  not found"""
+
+    pass
+
+
+class ClubNotFound(Exception):
+    """Exception raised when a Club  name, id, ... not found"""
 
     pass
 

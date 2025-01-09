@@ -2,6 +2,7 @@
 
 import os
 from datetime import datetime
+from typing import Literal
 
 import logfire
 from dotenv import load_dotenv
@@ -10,6 +11,7 @@ from peewee import (
     BooleanField,
     CharField,
     DateTimeField,
+    FloatField,
     ForeignKeyField,
     IntegerField,
     IntegrityError,
@@ -17,10 +19,12 @@ from peewee import (
     SqliteDatabase,
 )
 from playhouse.db_url import connect
+from playhouse.postgres_ext import JSONField
 from playhouse.shortcuts import model_to_dict
 from psycopg2 import OperationalError
 
 from src.extras.vwr_exceptions import (
+    ClubNotFound,
     NoClubMembership,
     NotAClubAdmin,
     NotATeamAdmin,
@@ -29,6 +33,11 @@ from src.extras.vwr_exceptions import (
     UserAlreadyOnTeam,
     UserNotRegistered,
 )
+
+if os.getenv("DATABASE_URL", None) is not None:
+    from playhouse.postgres_ext import *  # noqa: F403
+else:
+    from playhouse.sqlite_ext import *  # noqa: F403
 
 
 def init_db():
@@ -128,10 +137,12 @@ class User(BaseModel):
     discord_id = BigIntegerField(unique=True, null=False, index=True)
     discord_name = CharField(unique=True)
     tos = BooleanField(default=False)
-    active = BooleanField(default=True)
+    active = BooleanField(default=True)  # Is the user active
     club_id = ForeignKeyField(Club, backref="users", null=True, on_delete="SET NULL")
+    club_approved = BooleanField(default=False)  # Is the user approved to join the club
     club_admin = BooleanField(default=False)
     team_id = ForeignKeyField(Team, backref="users", null=True, on_delete="SET NULL")
+    team_approved = BooleanField(default=False)  # Is the user approved to join the team
     team_admin = BooleanField(default=False)
     created_at = DateTimeField(default=datetime.now)
     updated_at = DateTimeField(default=datetime.now)
@@ -195,6 +206,7 @@ class User(BaseModel):
             if join:
                 self.team_id = new_team
                 self.team_admin = True
+                self.team_approved = True
                 self.save()
             return new_team
         except IntegrityError as e:
@@ -203,6 +215,7 @@ class User(BaseModel):
 
     def add_user_to_club(self, discord_id: int):
         """Add a user to a club. The club you are an admin of."""
+        # TODO: This should probably be an server admin command
         if not self.club_admin:
             logfire.error(f"User {self.name} is not a club admin.")
             raise NotAClubAdmin("User must be a club admin to create a team.")
@@ -220,6 +233,7 @@ class User(BaseModel):
 
     def add_user_to_team(self, discord_id: int, team_name: str | None = None):
         """Add a user to a team. The team you are an admin of or any team in your club, if you a club admin."""
+        # TODO: This should probably be an server admin command
         team = Team.get_or_none(name=team_name)
         if not team_name and (self.team_id != team.id or not self.team_admin):
             logfire.error(f"User {self.name} is not a club admin.")
@@ -243,6 +257,112 @@ class User(BaseModel):
         user.team_id = team.id
         user.save()
         logfire.info(f"User {user.name} added to team {team_name}.")
+
+    def join_request(self, ctx, org_type: Literal["club", "team"], org_db_id: int):
+        """Request to join a club or team.
+
+        Args:
+            ctx: discord context
+            org_type: club or team
+            org_db_id: club or team database ID
+
+        """
+        if org_type == "club":
+            club = Club.get_or_none(Club.id == org_db_id)
+            if club is None:
+                logfire.error(f"Club with ID {org_db_id} not found.")
+                raise ClubNotFound("Club not found")
+            if self.club_id is not None:
+                logfire.error(f"User {self.name} is already in a club.")
+                raise UserAlreadyInClub("Discord user already in a club, you need to leave your club first")
+            self.club_id = club.id
+            self.club_approved = False
+            self.save()
+            logfire.info(f"User {self.name} requested to join club {club.name}.")
+            return True
+        elif org_type == "team":
+            team = Team.get_or_none(Team.id == org_db_id)
+            if team is None:
+                logfire.error(f"Team with ID {org_db_id} not found.")
+                raise TeamNotFound("Team not found")
+            if self.team_id is not None:
+                logfire.error(f"User {self.name} is already in a team.")
+                raise UserAlreadyOnTeam("Discord user already in a team")
+            self.team_id = team.id
+            self.team_approved = False
+            self.save()
+            logfire.info(f"User {self.name} requested to join team {team.name}.")
+            return True
+        else:
+            logfire.error("Somthing went wrong with the join request")
+            return False
+
+    def leave_org(self, org_type: Literal["club", "team"]):
+        """Leave a club or team.
+
+        Args:
+            org_type: club or team
+
+        """
+        if org_type == "club":
+            if self.club_id is None:
+                logfire.error(f"User {self.name} is not in a club.")
+                raise NoClubMembership("User is not in a club")
+            self.club_id = None
+            self.club_approved = False
+            self.club_admin = False
+            self.save()
+            logfire.info(f"User {self.name} left the club.")
+            return True
+        elif org_type == "team":
+            if self.team_id is None:
+                logfire.error(f"User {self.name} is not in a team.")
+                raise UserAlreadyOnTeam("User is not in a team")
+            self.team_id = None
+            self.team_approved = False
+            self.team_admin = False
+            self.save()
+            logfire.info(f"User {self.name} left the team.")
+            return True
+        else:
+            logfire.error("Somthing went wrong with the leave request")
+            return False
+
+    def approve_request(self, discord_id: int, org_type: Literal["club", "team"]):
+        """Approve a user request to join a club or team.
+
+        Args:
+            discord_id: Discord ID of the user to approve
+            org_type: club or team
+
+        """
+        if org_type == "club":
+            if not self.club_admin:
+                logfire.error(f"User {self.name} is not a club admin.")
+                raise NotAClubAdmin("User must be a club admin to approve a user request.")
+            user = User.get_or_none(User.discord_id == discord_id)
+            if user is None:
+                logfire.error(f"User with Discord ID {discord_id} not found.")
+                raise UserNotRegistered("Discord user needs to register")
+            user.club_approved = True
+            user.save()
+            logfire.info(f"User {user.name} approved to join the club.")
+            return True
+        elif org_type == "team":
+            if not self.team_admin:
+                logfire.error(f"User {self.name} is not a team admin.")
+                raise NotATeamAdmin("User must be a team admin to approve a user request.")
+            user = User.get_or_none(User.discord_id == discord_id)
+            if user is None:
+                logfire.error(f"User with Discord ID {discord_id} not found.")
+                raise UserNotRegistered("Discord user needs to register")
+            user.team_approved = True
+            user.save()
+            logfire.info(f"User {user.name} approved to join the team.")
+            return True
+        else:
+            logfire.error("Somthing went wrong with the approve request")
+            return False
 
     @property
     def zp_url(self, markdown: bool = True):
@@ -283,11 +403,75 @@ class User(BaseModel):
     @classmethod
     def lookup(cls, discord_id: int):
         """Lookup a user by Discord ID."""
+        logfire.info(f"Looking up user with Discord ID {discord_id}")
         user = User.get_or_none(discord_id=discord_id)
         if user is None:
-            logfire.error(f"User with Discord ID {discord_id} not found.")
+            logfire.error(f"UserNotRegistered: User with Discord ID {discord_id} not found.")
             raise UserNotRegistered("Discord user needs to register")
         return user.profile
+
+
+class Match(BaseModel):
+    """Match model."""
+
+    team_id_1 = ForeignKeyField(Team, backref="matches", null=False)
+    team_1_roster = JSONField(null=True)
+    team_1_accepted = BooleanField(default=False)
+    team_id_2 = ForeignKeyField(Team, backref="matches", null=False)
+    team_2_roster = JSONField(null=True)
+    team_2_accepted = BooleanField(default=False)
+    course_name = CharField(null=True)
+    course_id = IntegerField(null=True)
+    laps = IntegerField(null=True)
+    race_link = CharField(null=True)
+    start_datetime = DateTimeField(null=True)
+    roster_count_parity = IntegerField(null=True)
+    roster_median_parity = IntegerField(null=True)
+    roster_mean_parity = FloatField(null=True)
+    created_at = DateTimeField(default=datetime.now)
+    updated_at = DateTimeField(default=datetime.now)
+
+    def save(self, *args, **kwargs):
+        """Override save to update timestamp."""
+        self.updated_at = datetime.now()
+        super().save(*args, **kwargs)
+
+
+class MatchResult(BaseModel):
+    """Results model."""
+
+    match_id = ForeignKeyField(Match, backref="results", null=False)
+    team_id = ForeignKeyField(Team, backref="results", null=False)
+    place = IntegerField(null=False)
+    elapsed_time = FloatField(null=False)
+    finish_points = IntegerField(null=True)
+    kom_points = IntegerField(null=True)
+    sprint_points = IntegerField(null=True)
+    fts_points = IntegerField(null=True)
+    created_at = DateTimeField(default=datetime.now)
+    updated_at = DateTimeField(default=datetime.now)
+
+    def save(self, *args, **kwargs):
+        """Override save to update timestamp."""
+        self.updated_at = datetime.now()
+        super().save(*args, **kwargs)
+
+
+class MatchRecord(BaseModel):
+    """Match record model."""
+
+    match_id = ForeignKeyField(Match, backref="records", null=False)
+    zp_zwift = JSONField(null=True)
+    zp_view = JSONField(null=True)
+    zwift_event = JSONField(null=True)
+    zwift_results = JSONField(null=True)
+    created_at = DateTimeField(default=datetime.now)
+    updated_at = DateTimeField(default=datetime.now)
+
+    def save(self, *args, **kwargs):
+        """Override save to update timestamp."""
+        self.updated_at = datetime.now()
+        super().save(*args, **kwargs)
 
 
 # Initialize the database and create the tables
