@@ -5,6 +5,7 @@ import logfire
 
 from src.database.db_models import User
 from src.extras.channel_mgnt import create_on_guild
+from src.extras.roles_mgnt import BaseRole, add_base_role
 from src.extras.vwr_exceptions import UserNotRegistered
 
 
@@ -72,7 +73,7 @@ class CreateOrgForm(discord.ui.Modal):
                 new_org = user.create_team(
                     team_name=self.name.value,
                 )
-        except UserNotRegistered as e:
+        except UserNotRegistered as e: # Double-check the user is registered in the db
             logfire.error(f"Failed to create {self.org_type}: {e}")
             await interaction.respond(
                 f"❌ User '{self.name.value}' must be registered to create a Club or Team", ephemeral=True
@@ -82,13 +83,28 @@ class CreateOrgForm(discord.ui.Modal):
             await interaction.respond(f"❌ Failed to create {self.org_type}. Unknown error.\n{e!s}", ephemeral=True)
 
         await interaction.respond(f"{self.org_type.upper()} '{self.name.value}' successfully created!", ephemeral=True)
-        # Wait for the form response
+
+        # Setup channels and roles
         try:
             logfire.info(f"Create {self.name.value} channel in {self.org_type}")
             org_name = re.sub(r"[^a-z0-9_\-]", "-", self.name.value.lower())
             # Truncate name if it's too long (Discord limit is 100 characters)
             org_name = org_name[:100]
-            await create_on_guild(self.ctx, f"{self.org_type.upper()}s", org_name)
+            new_channel = await create_on_guild(self.ctx, self.org_type, org_name)
+            # Give the user the role of CLUB_MEMBER and CLUB_ADMIN
+            if self.org_type == "club":
+                await add_base_role(interaction, interaction.user.id, BaseRole.CLUB_MEMBER)
+                await add_base_role(interaction, interaction.user.id, BaseRole.CLUB_ADMIN)
+                logfire.info(f"Added {BaseRole.CLUB_MEMBER} and {BaseRole.CLUB_ADMIN} to {interaction.user}")
+            if self.org_type == "team":
+                await add_base_role(interaction, interaction.user.id, BaseRole.TEAM_MEMBER)
+                await add_base_role(interaction, interaction.user.id, BaseRole.TEAM_ADMIN)
+                logfire.info(f"Added {BaseRole.TEAM_MEMBER} and {BaseRole.TEAM_ADMIN} to {interaction.user}")
+
+            logfire.info(f"Logging registration for {interaction.user}")
+            log_channel = discord.utils.get(interaction.guild.channels, name="activity_logs")
+            if log_channel:
+                await log_channel.send(f"{interaction.user} created {self.org_type} '{new_channel.name}'")
         except Exception as e:
             logfire.error(f"General error, Failed to create {self.org_type.upper()} channel: {e}", exc_info=True)
             # raise e

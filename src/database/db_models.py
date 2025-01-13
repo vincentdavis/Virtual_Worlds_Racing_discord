@@ -46,7 +46,7 @@ def init_db():
         load_dotenv()
         database_url = os.getenv("DATABASE_URL", None)
         if database_url is not None:
-            logfire.info(f"Database URL: {database_url.split("@")[-1]}")
+            logfire.info(f"Database URL: {database_url.split('@')[-1]}")
             db = connect(database_url)
             logfire.info("Connected to PostgreSQL database.")
             return db
@@ -272,9 +272,10 @@ class User(BaseModel):
             if club is None:
                 logfire.error(f"Club with ID {org_db_id} not found.")
                 raise ClubNotFound("Club not found")
-            if self.club_id is not None:
-                logfire.error(f"User {self.name} is already in a club.")
-                raise UserAlreadyInClub("Discord user already in a club, you need to leave your club first")
+            # TODO, maybe let the user switch clubs
+            # if self.club_id is not None:
+            #     logfire.error(f"User {self.name} is already in a club.")
+            #     raise UserAlreadyInClub("Discord user already in a club, you need to leave your club first")
             self.club_id = club.id
             self.club_approved = False
             self.save()
@@ -285,9 +286,9 @@ class User(BaseModel):
             if team is None:
                 logfire.error(f"Team with ID {org_db_id} not found.")
                 raise TeamNotFound("Team not found")
-            if self.team_id is not None:
-                logfire.error(f"User {self.name} is already in a team.")
-                raise UserAlreadyOnTeam("Discord user already in a team")
+            # if self.team_id is not None:
+            #     logfire.error(f"User {self.name} is already in a team.")
+            #     raise UserAlreadyOnTeam("Discord user already in a team")
             self.team_id = team.id
             self.team_approved = False
             self.save()

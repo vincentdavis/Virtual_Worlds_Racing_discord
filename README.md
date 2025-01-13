@@ -17,13 +17,14 @@ A Discord bot designed to manage Zwift racing communities, providing registratio
     - Category: RIDERS, This is where all the rider channels are created.
     - Channel: Rider_help.
     - Category: CLUBS, This is where all the club channels are created.
+    - Channel: club_admin, This is a channel for the club admin, create club, add admin, remove admin... create team, remove team, team admin...
     - Channel: club-<club_name>, Automatically created. This is a channel for the club, only club members can see this channel.
     - Category: TEAMS, This is where all the team channels are created.
     - Channel: team-<team_name>, Automatically created. This is a channel for the team, only team members can see this channel. All club member can access all team channels.
-    - 
+    - Channel: activity_logs, Logs most user membership activity, register, join/leave club/team. Can be public read
     - 
     
-### User, Rider, Racer managment:
+### User, Rider, Racer management:
 - **Registration System**
 - The splash command can only be used in the welcome-adn-rules channel
 - **Rider Profile**
@@ -37,7 +38,7 @@ A Discord bot designed to manage Zwift racing communities, providing registratio
 1. We try to limit the data related to a Zwift_ID (zwid), until the user has participated in a race, thus verifing there zwid. 
 
 
-## Plan
+## Plan Not implemented yet
 
 ### Rider Management
 - **Registration System**

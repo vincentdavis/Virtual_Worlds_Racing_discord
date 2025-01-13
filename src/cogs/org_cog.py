@@ -2,6 +2,7 @@ import discord
 import logfire
 from discord.ext import commands
 
+from src.extras.roles_mgnt import BaseRole, check_user_roles
 from src.extras.untils import check_channel
 from src.forms.org_forms import CreateOrgForm
 
@@ -16,10 +17,27 @@ class OrgCog(commands.Cog):
     teams = discord.SlashCommandGroup("team", "Team management commands.")
 
     @clubs.command(name="create")
-    @commands.check(lambda ctx: discord.utils.get(ctx.author.roles, name="REGISTERED"))
     async def create_club(self, ctx):
         """Create a new Club. PRES ENTER."""
         with logfire.span("CREATE CLUB"):
+            check_reg, msg, roles = await check_user_roles(
+                ctx, discord_id=ctx.author.id, role_filter=BaseRole.REGISTERED
+            )
+            if not check_reg:
+                await ctx.response.send_message(
+                    f"Error: {msg}",
+                    ephemeral=True,
+                )
+                return
+            check_mem, msg, roles = await check_user_roles(
+                ctx, discord_id=ctx.author.id, role_filter=BaseRole.CLUB_MEMBER
+            )
+            if check_mem:
+                await ctx.response.send_message(
+                    "Error: You are already a member of a club. You cannot create a new club.",
+                    ephemeral=True,
+                )
+                return
             try:
                 if not await check_channel(
                     ctx, ["club-admin"], "This command can only be used in the `#club-admin` channel."
@@ -32,21 +50,62 @@ class OrgCog(commands.Cog):
                 await ctx.response.send_message("❌ Failed to create club.", ephemeral=True)
 
     @teams.command(name="create")
-    @commands.check(lambda ctx: discord.utils.get(ctx.author.roles, name="REGISTERED"))
     async def create_team(self, ctx):
         """Create a new Team. PRES ENTER."""
         org_type: str = "team"
-        with logfire.span(f"CREATE {org_type.capitalize()}"):
+        with logfire.span("CREATE TEAM"):
             try:
-                if not await check_channel(
-                    ctx, ["team-admin"], f"This command can only be used in the `#{org_type}-admin` channel."
-                ):
+                check_reg, msg, roles = await check_user_roles(
+                    ctx, discord_id=ctx.author.id, role_filter=BaseRole.REGISTERED
+                )
+                if not check_reg:
+                    await ctx.response.send_message(
+                        f"Error: {msg}",
+                        ephemeral=True,
+                    )
+                    return
+                check_mem, msg, roles = await check_user_roles(
+                    ctx, discord_id=ctx.author.id, role_filter=BaseRole.CLUB_ADMIN
+                )
+                if check_mem:
+                    await ctx.response.send_message(
+                        "Error: You must be a CLUB_ADMIN to create a team",
+                        ephemeral=True,
+                    )
                     return
                 create_form = CreateOrgForm(ctx, org_type=org_type)
                 await ctx.response.send_modal(create_form)
             except Exception as e:
                 logfire.error(f"Failed to create {org_type.capitalize()}: {e}", exc_info=True)
                 await ctx.response.send_message(f"❌ Failed to create {org_type.capitalize()}.", ephemeral=True)
+
+    @clubs.command(name="review_join_requets")
+    async def review_join_requests(self, ctx):
+        """Review join requests for the club."""
+        with logfire.span("REVIEW JOIN REQUESTS"):
+            try:
+                check_reg, msg, roles = await check_user_roles(
+                    ctx, discord_id=ctx.author.id, role_filter=BaseRole.REGISTERED
+                )
+                if not check_reg:
+                    await ctx.response.send_message(
+                        f"Error: {msg}",
+                        ephemeral=True,
+                    )
+                    return
+                check_mem, msg, roles = await check_user_roles(
+                    ctx, discord_id=ctx.author.id, role_filter=BaseRole.CLUB_ADMIN
+                )
+                if not check_mem:
+                    await ctx.response.send_message(
+                        "Error: You must be a CLUB_ADMIN to review join requests.",
+                        ephemeral=True,
+                    )
+                    return
+                await ctx.response.send_message("Review join requests.")
+            except Exception as e:
+                logfire.error(f"Failed to review join requests: {e}", exc_info=True)
+                await ctx.response.send_message("❌ Failed to review join requests.", ephemeral=True)
 
 
 def setup(bot):
